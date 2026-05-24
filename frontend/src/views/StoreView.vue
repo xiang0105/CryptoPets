@@ -2,30 +2,12 @@
 import { computed, ref } from 'vue'
 import { goodies } from '@/data/goodies'
 import type { GoodieSft } from '@/data/goodies'
-import { isZh } from '@/i18n'
+import { currentMessages, isZh } from '@/i18n'
 import { marketCapybaraSprites } from '@/content/gameAssets'
-import marketMap from '@/assets/map/market.png'
+import marketMap from '@game-content/assets/maps/market.png'
 
 const text = computed(() => ({
-  previousArea: isZh.value ? '上一區商品' : 'Previous goods area',
-  nextArea: isZh.value ? '下一區商品' : 'Next goods area',
-  animation: isZh.value ? '動畫' : 'Animation',
-  listItem: isZh.value ? '上架商品' : 'LIST ITEM FOR SALE',
-  sellGoodies: isZh.value ? '出售你的道具' : 'SELL YOUR GOODIES',
-  inventoryTitle: isZh.value ? '選擇要上架的材料' : 'Choose material to list',
-  inventoryHint: isZh.value ? '背包材料' : 'Inventory',
-  price: isZh.value ? '價格' : 'Price',
-  listSelected: isZh.value ? '確認上架' : 'List item',
-  emptyListings: isZh.value ? '尚未上架任何商品' : 'No active listings yet',
-  overview: isZh.value ? '我的市場總覽' : 'MY MARKETPLACE OVERVIEW',
-  activeListings: isZh.value ? '上架中商品' : 'MY ACTIVE LISTINGS',
-  transactions: isZh.value ? '近期交易' : 'RECENT TRANSACTIONS',
-  reputation: isZh.value ? '市場評價' : 'MARKETPLACE REPUTATION',
-  buy: isZh.value ? '購買' : 'Buy',
-  bought: isZh.value ? '買入' : 'Bought',
-  sold: isZh.value ? '售出' : 'Sold',
-  listed: isZh.value ? '上架' : 'Listed',
-  coins: isZh.value ? '金幣' : 'Coins',
+  ...currentMessages.value.store,
 }))
 
 const shelfPage = ref(0)
@@ -120,7 +102,7 @@ function coinAmount(amount: number) {
 }
 
 function removeListingLabel() {
-  return isZh.value ? '下架' : 'Remove'
+  return text.value.remove
 }
 
 function buyLabel(goodie: GoodieSft) {
@@ -136,10 +118,10 @@ function recordTransaction(actionKey: 'bought' | 'sold' | 'listed', name: string
 
 function modalText() {
   return {
-    title: isZh.value ? '確認下架商品' : 'Remove listing?',
-    body: isZh.value ? '下架後此商品會從上架清單移除。' : 'This item will be removed from your active listings.',
-    cancel: isZh.value ? '取消' : 'Cancel',
-    confirm: isZh.value ? '確認下架' : 'Remove',
+    title: text.value.removeTitle,
+    body: text.value.removeBody,
+    cancel: text.value.cancel,
+    confirm: text.value.confirmRemove,
   }
 }
 
@@ -176,14 +158,14 @@ function buyGoodie(goodie: GoodieSft) {
   purchasedListingIds.value = [...purchasedListingIds.value, goodie.id]
   const name = displayName(goodie)
   recordTransaction('bought', name, -goodie.price)
-  storeNotice.value = isZh.value ? `已購買 ${name}` : `Bought ${name}`
+  storeNotice.value = `${text.value.bought} ${name}`
 }
 
 function listSelectedGoodie() {
   const selectedGoodie = selectedInventoryGoodie.value
 
   if (!selectedGoodie) {
-    storeNotice.value = isZh.value ? '沒有可上架的材料。' : 'No material available to list.'
+    storeNotice.value = text.value.noMaterial
     return
   }
 
@@ -196,7 +178,7 @@ function listSelectedGoodie() {
   }
   createdListings.value = [listing, ...createdListings.value]
   recordTransaction('listed', displayName(listing), 0)
-  storeNotice.value = isZh.value ? `已上架 ${displayName(listing)}` : `Listed ${displayName(listing)}`
+  storeNotice.value = `${text.value.listed} ${displayName(listing)}`
   closeInventoryModal()
 }
 
@@ -210,7 +192,7 @@ function confirmRemoveListing() {
   }
 
   removedListingIds.value = [...removedListingIds.value, pendingRemoval.value.id]
-  storeNotice.value = isZh.value ? `已下架 ${displayName(pendingRemoval.value)}` : `Removed ${displayName(pendingRemoval.value)}`
+  storeNotice.value = `${text.value.remove} ${displayName(pendingRemoval.value)}`
   pendingRemoval.value = null
 }
 
@@ -427,7 +409,7 @@ function goShelfArea(direction: -1 | 1) {
                   <span class="material-icon" :class="`material-${goodie.element}`"></span>
                 </span>
                 <span class="inventory-price"><i aria-hidden="true"></i>{{ goodie.price }}</span>
-                <span class="inventory-action"><i aria-hidden="true"></i>{{ isZh ? '選擇' : 'Select' }}</span>
+                <span class="inventory-action"><i aria-hidden="true"></i>{{ text.select }}</span>
                 <small>x{{ goodie.amount }}</small>
               </template>
               <template v-else>

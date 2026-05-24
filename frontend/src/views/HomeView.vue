@@ -4,8 +4,8 @@ import { pets, type Pet } from '@/data/pets'
 import { expeditionTeamPets } from '@/state/expeditionTeam'
 import { grantSkillPoints } from '@/state/testProgress'
 import { petImages, yuzuBiteFrames } from '@/content/gameAssets'
-import orangeMap from '@/assets/map/orange.png'
-import { isZh } from '@/i18n'
+import orangeMap from '@game-content/assets/maps/orange.png'
+import { currentMessages, isZh } from '@/i18n'
 import {
   expeditionForests,
   petElementMeta,
@@ -18,24 +18,7 @@ import {
 const elementMeta = petElementMeta
 
 const text = computed(() => ({
-  activeExpedition: isZh.value ? '遠征狀態' : 'EXPEDITION STATUS',
-  missionName: isZh.value ? '選擇一座森林' : 'Choose a forest',
-  progress: isZh.value ? '進度' : 'PROGRESS',
-  ready: isZh.value ? '待命' : 'READY',
-  nextEvent: isZh.value ? '下一事件' : 'NEXT EVENT',
-  goal: isZh.value ? '目標' : 'GOAL',
-  chooseForest: isZh.value ? '選擇森林' : 'CHOOSE FOREST',
-  start: isZh.value ? '開始探索' : 'Start',
-  complete: isZh.value ? '完成探索' : 'Complete',
-  exploring: isZh.value ? '探索中' : 'Exploring',
-  completed: isZh.value ? '可回報' : 'Ready to report',
-  locked: isZh.value ? '探索完成前無法選擇下一座森林' : 'Choose the next forest after this expedition completes',
-  currentStatus: isZh.value ? '目前狀態' : 'Current Status',
-  expeditionLog: isZh.value ? '遠征紀錄' : 'EXPEDITION LOG',
-  partyTitle: isZh.value ? '寵物隊伍能力總覽' : 'PET PARTY STATS & OVERVIEW',
-  level: isZh.value ? '等級' : 'Lv.',
-  hp: isZh.value ? '生命' : 'HP',
-  exp: isZh.value ? '經驗' : 'EXP',
+  ...currentMessages.value.home,
 }))
 
 const fruitFrames = yuzuBiteFrames
@@ -209,14 +192,14 @@ function abilityNote(forest: ForestOption) {
   const requiredPower = 185 + forest.difficulty * 35
 
   if (power >= requiredPower) {
-    return isZh.value ? '隊伍能力高於需求，事件處理得很順。' : 'The party outmatched the route and handled events smoothly.'
+    return text.value.routeStrong
   }
 
   if (power >= requiredPower - 30) {
-    return isZh.value ? '隊伍能力接近需求，途中有些吃力但仍能穩住。' : 'The party was close to the requirement, strained but steady.'
+    return text.value.routeSteady
   }
 
-  return isZh.value ? '隊伍能力低於建議值，事件結果會偏保守。' : 'The party was below the suggested score, so outcomes stayed conservative.'
+  return text.value.routeWeak
 }
 
 function currentExpeditionTeam() {

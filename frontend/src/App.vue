@@ -2,28 +2,28 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import MarkdownIt from 'markdown-it'
-import { isZh, locale, toggleLocale } from './i18n'
+import { currentMessages, locale, toggleLocale } from './i18n'
 import { useWallet } from '@/composables/useWallet'
 import { createStarterPets, replacePets } from '@/data/pets'
 import { setExpeditionTeam } from '@/state/expeditionTeam'
 import { resetTestProgress } from '@/state/testProgress'
 import { capybaraImageBySlug } from '@/content/gameAssets'
 import { starterCapybaras } from '@cryptopets/game-content'
-import readmeContent from '@/content/help.md?raw'
-import backgroundMusicUrl from '@/assets/music/Capybara_Meadow.mp3'
+import logoUrl from '@game-content/assets/branding/logo.png'
+import backgroundMusicUrl from '@game-content/assets/audio/capybara-meadow.mp3'
 
 const menuItems = computed(() => [
-  { label: isZh.value ? '首頁' : 'Home', to: '/' },
-  { label: isZh.value ? '寵物' : 'Pet', to: '/pet' },
-  { label: isZh.value ? '商店' : 'Store', to: '/store' },
+  { label: currentMessages.value.app.nav.home, to: '/' },
+  { label: currentMessages.value.app.nav.pet, to: '/pet' },
+  { label: currentMessages.value.app.nav.store, to: '/store' },
 ])
 
-const actionItems = [
-  { label: '背景音樂', icon: 'music' },
-  { label: '說明', icon: 'circle-question' },
-  { label: '錢包', icon: 'wallet' },
-  { label: '顏色對調', icon: 'circle-half-stroke' },
-]
+const actionItems = computed(() => [
+  { label: currentMessages.value.app.actions.music, icon: 'music' },
+  { label: currentMessages.value.app.actions.help, icon: 'circle-question' },
+  { label: currentMessages.value.app.actions.wallet, icon: 'wallet' },
+  { label: currentMessages.value.app.actions.monoMode, icon: 'circle-half-stroke' },
+])
 
 const starterGiftPets = starterCapybaras.map((pet) => ({
   name: pet.name,
@@ -50,13 +50,13 @@ const markdown = new MarkdownIt({
   typographer: true,
 })
 
-const renderedReadme = computed(() => markdown.render(readmeContent))
+const renderedReadme = computed(() => markdown.render(currentMessages.value.app.help.markdown))
 
 const musicButtonIcon = computed(() => (isMusicPlaying.value ? 'music' : 'volume-xmark'))
 
-const visibleActionItems = computed(() => actionItems)
+const visibleActionItems = computed(() => actionItems.value)
 const canConfirmLogin = computed(() => Boolean(walletAddress.value))
-const walletInputPlaceholder = computed(() => walletError.value || 'Waiting for MetaMask wallet address')
+const walletInputPlaceholder = computed(() => walletError.value || currentMessages.value.app.login.walletPlaceholder)
 
 const currentPageIndex = computed(() => {
   const index = pageOrder.indexOf(route.path)
@@ -118,7 +118,7 @@ function handleAction(icon: string) {
 
   if (icon === 'wallet') {
     void connectWallet().catch(() => {
-      window.alert(walletError.value || 'Wallet login failed.')
+      window.alert(walletError.value || currentMessages.value.app.login.walletFailed)
     })
   }
 
@@ -134,17 +134,17 @@ function handleAction(icon: string) {
 
 async function startLoginFlow() {
   if (walletAddress.value) {
-    loginNotice.value = 'Wallet detected. Confirm to enter.'
+    loginNotice.value = currentMessages.value.app.login.walletDetected
     return
   }
 
-  loginNotice.value = 'Opening MetaMask...'
+  loginNotice.value = currentMessages.value.app.login.openingWallet
 
   try {
     await connectWallet()
-    loginNotice.value = 'Wallet connected. Confirm to enter.'
+    loginNotice.value = currentMessages.value.app.login.walletConnected
   } catch {
-    loginNotice.value = walletError.value || 'MetaMask login failed.'
+    loginNotice.value = walletError.value || currentMessages.value.app.login.walletFailed
   }
 }
 
@@ -201,7 +201,7 @@ onBeforeUnmount(() => {
         :disabled="!canConfirmLogin"
         @click="confirmLogin"
       >
-        Confirm
+        {{ currentMessages.app.login.confirm }}
       </button>
       <p class="login-notice" aria-live="polite">{{ loginNotice }}</p>
     </div>
@@ -222,7 +222,7 @@ onBeforeUnmount(() => {
       </nav>
 
       <RouterLink class="brand-log" to="/" aria-label="Capy's Big Adventure Log">
-        <img src="@/assets/logo.png" alt="Capy's Big Adventure Log" />
+        <img :src="logoUrl" alt="Capy's Big Adventure Log" />
       </RouterLink>
 
       <div class="quick-actions" aria-label="Quick actions">
@@ -242,8 +242,8 @@ onBeforeUnmount(() => {
               ? shortWalletAddress
               : item.icon === 'music'
                 ? isMusicPlaying
-                  ? '關閉背景音樂'
-                  : '開啟背景音樂'
+                  ? currentMessages.app.actions.musicOn
+                  : currentMessages.app.actions.musicOff
                 : item.label
           "
           :title="
@@ -251,8 +251,8 @@ onBeforeUnmount(() => {
               ? shortWalletAddress
               : item.icon === 'music'
                 ? isMusicPlaying
-                  ? '關閉背景音樂'
-                  : '開啟背景音樂'
+                  ? currentMessages.app.actions.musicOn
+                  : currentMessages.app.actions.musicOff
                 : walletError || item.label
           "
           @click="handleAction(item.icon)"
@@ -262,10 +262,10 @@ onBeforeUnmount(() => {
         <button
           class="action-button locale-button"
           type="button"
-          :aria-label="isZh ? '切換英文' : 'Switch to Chinese'"
+          :aria-label="currentMessages.app.actions.switchLanguage"
           @click="toggleLocale"
         >
-          {{ locale === 'zh' ? 'EN' : '中' }}
+          {{ locale === 'zh-TW' ? 'EN' : '中' }}
         </button>
       </div>
     </div>
@@ -275,7 +275,7 @@ onBeforeUnmount(() => {
     <button
       class="page-arrow page-arrow-left"
       type="button"
-      :aria-label="isZh ? '上一頁' : 'Previous page'"
+      :aria-label="currentMessages.app.paging.previous"
       @click="goRelativePage(-1)"
     >
       <FontAwesomeIcon icon="chevron-left" aria-hidden="true" />
@@ -290,7 +290,7 @@ onBeforeUnmount(() => {
     <button
       class="page-arrow page-arrow-right"
       type="button"
-      :aria-label="isZh ? '下一頁' : 'Next page'"
+      :aria-label="currentMessages.app.paging.next"
       @click="goRelativePage(1)"
     >
       <FontAwesomeIcon icon="chevron-right" aria-hidden="true" />
@@ -307,7 +307,7 @@ onBeforeUnmount(() => {
   >
     <section class="help-panel">
       <header>
-        <h2 id="help-panel-title">{{ isZh ? '說明' : 'Help' }}</h2>
+        <h2 id="help-panel-title">{{ currentMessages.app.help.title }}</h2>
         <button type="button" aria-label="Close help" @click="isHelpPanelOpen = false">
           <FontAwesomeIcon icon="xmark" aria-hidden="true" />
         </button>
@@ -325,21 +325,15 @@ onBeforeUnmount(() => {
     @click.self="closeStarterGift"
   >
     <section class="starter-gift-panel">
-      <h2 id="starter-gift-title">{{ isZh ? '測試階段贈送水豚' : 'Testing Starter Pets' }}</h2>
-      <p>
-        {{
-          isZh
-            ? '目前測試階段每次登入都會視為新用戶，贈送原先四隻水豚。未來正式上鏈後，會改成依錢包是否曾登入遊戲與鏈上領取紀錄判斷。'
-            : 'During testing, every login is treated as a new user and receives the original four capybaras. After launch, this will depend on wallet login history and on-chain claim records.'
-        }}
-      </p>
-      <div class="starter-gift-list" aria-label="Gifted capybaras">
+      <h2 id="starter-gift-title">{{ currentMessages.app.starterGift.title }}</h2>
+      <p>{{ currentMessages.app.starterGift.body }}</p>
+      <div class="starter-gift-list" :aria-label="currentMessages.app.starterGift.listLabel">
         <article v-for="pet in starterGiftPets" :key="pet.name" class="starter-gift-card">
           <img :src="pet.image" :alt="pet.name" draggable="false" />
           <span>{{ pet.name }}</span>
         </article>
       </div>
-      <button type="button" @click="closeStarterGift">{{ isZh ? '收下' : 'Accept' }}</button>
+      <button type="button" @click="closeStarterGift">{{ currentMessages.app.starterGift.accept }}</button>
     </section>
   </div>
   </template>

@@ -1,50 +1,18 @@
 # CryptoPets Backend
 
-CryptoPets 後端是 Express + TypeScript API server，負責錢包簽名登入、玩家資料、遠征、市場、交易與好友等服務。專案最終會以上鏈資料為準，後端資料庫主要作為驗證、快取、索引與非鏈上輔助資料。
+後端是 Express + TypeScript API server，負責玩家驗證、資料庫讀寫、遊戲機制、市場、遠征、好友流程，以及未來上鏈接口。前端只能透過後端 API 取得授權後的玩家資料。
 
-## 開發資訊
+## 職責
 
-- Dev server: `http://localhost:3400`
-- Framework: Express
-- Language: TypeScript
-- Database: Supabase PostgreSQL
-- Web3 library: ethers
+- MetaMask nonce、signature 驗證與 JWT 發放。
+- Supabase PostgreSQL 資料讀寫。
+- 玩家初始化、寵物快取、素材庫存、貨幣、市場、交易、遠征與好友流程。
+- 遠征獎勵、商品市場結算等遊戲邏輯。
+- 未來串接 RPC、合約、indexer、relayer 與 token metadata service。
 
-## 啟動方式
+## Env
 
-在專案根目錄執行：
-
-```bash
-npm run dev:backend
-```
-
-或在 `backend/` 目錄執行：
-
-```bash
-npm run dev
-```
-
-建置：
-
-```bash
-npm run build
-```
-
-啟動建置後版本：
-
-```bash
-npm run start
-```
-
-型別檢查：
-
-```bash
-npm run type-check
-```
-
-## 環境變數
-
-請由 `backend/.env.example` 建立 `backend/.env`。
+請從 `backend/.env.example` 建立 `backend/.env`。
 
 ```text
 NODE_ENV=development
@@ -63,110 +31,87 @@ NFT_CONTRACT_ADDRESS=0x0000000000000000000000000000000000000000
 CHAIN_ID=1
 ```
 
-注意：`SUPABASE_SERVICE_ROLE_KEY`、`JWT_SECRET`、RPC key 或任何私密資訊只能放在後端環境，不可放到前端。
+變數說明：
 
-## API
+- `NODE_ENV`：執行環境，常用值為 `development` 或 `production`。
+- `PORT`：後端 HTTP server port。本地預設 `3400`。
+- `CORS_ORIGIN`：允許呼叫 API 的前端來源。本地預設 `http://localhost:5400`。
+- `JWT_SECRET`：簽發登入 JWT 的密鑰，正式環境必須使用長且不可預測的字串。
+- `SUPABASE_URL`：Supabase 專案 URL。
+- `SUPABASE_SERVICE_ROLE_KEY`：後端專用 service role key。只能放後端，不能放前端或任何 `VITE_` 變數。
+- `WEB3_LOGIN_DOMAIN`：錢包簽名訊息中的 domain，需與前端網域一致。
+- `WEB3_LOGIN_STATEMENT`：錢包簽名訊息中的登入說明。
+- `RPC_URL`：未來讀取鏈上資料或送交易用 RPC endpoint。目前上鏈未實作，可先保留範本。
+- `NFT_CONTRACT_ADDRESS`：未來水豚 NFT 合約位址。目前上鏈未實作，可先保留零地址。
+- `CHAIN_ID`：目標鏈 ID，用於簽名驗證、合約讀取或鏈上資料同步。
 
-### Health
+## 資料庫使用方式
 
-- `GET /health`
-
-### Auth
-
-- `POST /auth/nonce`
-- `POST /auth/login`
-
-登入流程會產生 nonce，讓玩家用 MetaMask 簽名，再由後端用 ethers 驗證簽名與錢包地址，成功後回傳 JWT。
-
-目前前端預設使用 `VITE_FRONTEND_ONLY_AUTH=true`，因此前端測試時會略過這組登入 API。要測試正式後端登入，請將前端設定改成 `VITE_FRONTEND_ONLY_AUTH=false`。
-
-### Player
-
-- `GET /player`
-
-### Expedition
-
-- `POST /start-expedition`
-- `POST /claim-reward`
-
-### Market
-
-- `GET /resources`
-- `GET /market/listings`
-- `POST /market/listings`
-- `POST /market/cancel-listing`
-- `POST /market/buy-listing`
-- `GET /transactions`
-
-### Social
-
-- `POST /add-friend`
-- `GET /friends`
-
-## Supabase
-
-Schema 位於：
+資料庫使用 Supabase PostgreSQL。Schema 位於：
 
 ```text
 backend/supabase/schema.sql
 ```
 
-目前包含：
-
-- `users`
-- `auth_nonces`
-- `pets`
-- `pet_teams`
-- `currencies`
-- `inventory`
-- `market_listings`
-- `transactions`
-- `expeditions`
-- `friends`
-- `friend_requests`
-
-Schema 內已包含部分 RLS policy、index、updated_at trigger 與基本關聯設計。
-
-開發或測試資料清理腳本：
+開發或重置測試資料用 SQL：
 
 ```text
 backend/supabase/clear_game_data.sql
 ```
 
-此腳本用於清空遊戲資料，預設不清空 `users` 與 `auth_nonces`，避免登入身份資料被誤刪。正式使用前請先確認要清除的表。
+建立資料庫：
 
-## 目前資料策略
+1. 建立 Supabase project。
+2. 到 Supabase SQL Editor。
+3. 貼上並執行 `backend/supabase/schema.sql`。
+4. 將 Supabase project URL 填入 `SUPABASE_URL`。
+5. 將 service role key 填入 `SUPABASE_SERVICE_ROLE_KEY`。
+6. 啟動後端，透過 API 讀寫資料。
 
-`playerService.initializePlayerIfNeeded` 目前只保留為同步入口，不會再自動產生寵物、材料或金幣。
+資料庫目前保存遊戲機制資料，例如：
 
-未來正式上鏈後，預期流程是：
+- `users`：錢包 address 對應的玩家帳號。
+- `auth_nonces`：MetaMask 登入簽名用 nonce。
+- `pets`：目前測試用或未來鏈上同步後的水豚快取。
+- `pet_teams`：玩家隊伍配置。
+- `currencies`：遊戲內金幣。
+- `inventory`：素材庫存快取。
+- `market_listings`：商品市場上架資料。
+- `transactions`：市場、獎勵、升級等交易紀錄。
+- `expeditions`：遠征開始、完成、獎勵領取紀錄。
+- `friends`、`friend_requests`：好友與邀請資料。
 
-- 從 ERC-721 讀取玩家擁有的水豚寵物。
-- 從 ERC-1155 讀取玩家擁有的材料或消耗品。
-- 從 tokenURI 或 metadata service 取得寵物資料。
-- 從合約事件或 indexer 同步市場與交易紀錄。
-- 後端資料庫只保存快取、查詢索引、登入身份、排行榜或需要服務端驗證的資料。
+資料庫與鏈上分工：
 
-## 主要目錄
+- 鏈上最終會提供玩家 address、水豚 NFT ownership、素材或道具 ownership。
+- 資料庫保存遊戲流程與查詢友善資料，例如市場上架、遠征紀錄、交易紀錄、好友關係、快取與索引。
+- 因為上鏈尚未實作，目前水豚與素材會先用本地測試資料或資料庫快取代替。
+- 未來接上鏈上資料後，後端會改成由合約或 indexer 抓取 ownership，再同步或快取到資料庫。
 
-```text
-src/
-├─ app.ts              Express app 設定
-├─ index.ts            Server entry
-├─ config/             env 與 Supabase client
-├─ controllers/        HTTP controller
-├─ middleware/         auth 與 error handler
-├─ routes/             API routes
-├─ services/           商業邏輯與資料存取
-└─ utils/              async handler 與 HTTP error
+`clear_game_data.sql` 只適合開發環境，執行前請確認要清除的表與資料範圍。
+
+## API
+
+- `GET /health`
+- `POST /auth/nonce`
+- `POST /auth/login`
+- `GET /player`
+- `GET /resources`
+- `POST /start-expedition`
+- `POST /claim-reward`
+- `GET /market/listings`
+- `POST /market/listings`
+- `POST /market/cancel-listing`
+- `POST /market/buy-listing`
+- `GET /transactions`
+- `POST /add-friend`
+- `GET /friends`
+
+## 指令
+
+```bash
+npm run dev:backend
+npm run build:backend
+npm --workspace backend run type-check
+npm --workspace backend run start
 ```
-
-共用遊戲內容放在根目錄 `game-content/`。後端透過 `@cryptopets/game-content` 讀取材料 ID、素材定義與未來可用的劇本規則，避免前後端各自維護一份內容。
-
-## 後續重點
-
-- 補上完整 API 測試。
-- 統一 API response 格式。
-- 將市場與遠征流程改成可驗證鏈上資產。
-- 加入合約事件同步或 indexer。
-- 強化 RLS policy、rate limit、錯誤紀錄與部署監控。

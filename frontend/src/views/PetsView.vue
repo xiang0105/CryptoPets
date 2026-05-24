@@ -4,7 +4,7 @@ import { goodies } from '@/data/goodies'
 import { pets, type Pet } from '@/data/pets'
 import { expeditionTeamIds, isPetInExpeditionTeam, maxTeamSlots, setExpeditionTeamSlot } from '@/state/expeditionTeam'
 import { availableSkillPoints, spendSkillPoint } from '@/state/testProgress'
-import { isZh } from '@/i18n'
+import { currentMessages, isZh } from '@/i18n'
 import { petImages } from '@/content/gameAssets'
 
 const maxPetSlots = 20
@@ -32,42 +32,10 @@ const breakthroughMaterials = [
 ]
 
 const text = computed(() => ({
-  teamTitle: isZh.value ? `隊伍（${maxTeamSlots} 格）` : `Team (${maxTeamSlots} slots)`,
-  expeditionTeam: isZh.value ? '遠征隊伍' : 'Expedition Team',
-  leader: isZh.value ? '隊長' : 'Leader',
-  filterSort: isZh.value ? '篩選 / 排序' : 'Filter/Sort',
-  addTeam: isZh.value ? '加入隊伍' : 'Add to Team',
-  removeTeam: isZh.value ? '移出隊伍' : 'Remove from Team',
-  stationTitle: isZh.value ? '水豚養成資料站' : 'Capybara Nurture Station',
-  level: isZh.value ? '等級' : 'Lv.',
-  expUpgrade: isZh.value ? '經驗升級' : 'EXP Level Up',
-  intro: isZh.value ? '水豚介紹' : 'Capybara Intro',
-  skillDesign: isZh.value ? '技能設計' : 'Skill Design',
-  upgrade: isZh.value ? '升級' : 'Upgrade',
-  skillUpgrade: isZh.value ? '技能升級' : 'Skill Upgrade',
-  basicData: isZh.value ? '水豚基本資料' : 'Capybara Basic Data',
-  autoNurture: isZh.value ? '自動養成' : 'Auto-Nurture',
-  predictedLevel: isZh.value ? '預測 +1 等' : 'Predicted +1 Lv.',
-  nextLevel: isZh.value ? '下一等級' : 'Next Lv.',
-  requiredExp: isZh.value ? '升級經驗' : 'Required EXP',
-  skillPoints: isZh.value ? '技能點數' : 'Skill Points',
-  fruitExp: isZh.value ? '水果經驗' : 'Fruit EXP',
-  stageBreakthrough: isZh.value ? '階段突破' : 'Stage Breakthrough',
-  breakthroughReady: isZh.value ? '已達突破條件' : 'Breakthrough Ready',
-  breakthroughLocked: isZh.value ? '尚未達成突破條件' : 'Not Ready',
-  addPoint: isZh.value ? '加點' : 'Add',
-  napAttack: isZh.value ? '午睡攻擊' : 'Nap Attack',
-  bash: isZh.value ? '撞擊' : 'Bash',
-  forage: isZh.value ? '採集直覺' : 'Forage Instinct',
-  emptyPet: isZh.value ? '空寵物槽' : 'Empty pet slot',
-  element: isZh.value ? '屬性' : 'Element',
-  owner: isZh.value ? '擁有者' : 'Owner',
-  token: isZh.value ? '代幣' : 'Token',
-  stage: isZh.value ? '階段' : 'Stage',
-  birth: isZh.value ? '生日' : 'Birth',
-  animation: isZh.value ? '動畫' : 'Animation',
-  confirmUpgrade: isZh.value ? '確認升級' : 'Confirm Upgrade',
-  confirmBreakthrough: isZh.value ? '確認突破' : 'Confirm Breakthrough',
+  ...currentMessages.value.pets,
+  teamTitle: isZh.value
+    ? `${currentMessages.value.pets.teamTitle}（${maxTeamSlots} 格）`
+    : `${currentMessages.value.pets.teamTitle} (${maxTeamSlots} slots)`,
 }))
 
 const selectedPet = computed(() => localPets.value.find((pet) => pet.id === selectedPetId.value) ?? localPets.value[0])
