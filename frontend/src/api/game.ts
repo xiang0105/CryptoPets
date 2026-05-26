@@ -1,6 +1,7 @@
 import type {
   ExpeditionSummary,
   FriendSummary,
+  MaterialBackpack,
   MarketListing,
   PlayerResources,
   PlayerProfile,
@@ -14,6 +15,10 @@ export function getPlayer() {
 
 export function getResources() {
   return apiRequest<PlayerResources>('/resources')
+}
+
+export function getMaterialBackpack() {
+  return apiRequest<MaterialBackpack>('/materials/backpack')
 }
 
 export function startExpedition(petIds: string[], expeditionType = 'forest') {

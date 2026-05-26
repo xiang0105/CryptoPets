@@ -1,19 +1,20 @@
-# Backend TASK
+# 後端任務狀態
 
 ## 已完成
 
 - 建立 Express + TypeScript backend workspace。
-- 建立環境變數設定與 Supabase client。
-- 建立 auth nonce / login route 骨架。
-- 建立 player、market、friend、expedition controllers/services。
-- 建立 Supabase schema 與開發用清理 SQL。
-- 後端可引用 `@cryptopets/game-content` 驗證材料 ID。
-- 補齊後端 README、TODO、TASK。
+- 建立 env validation 與 Supabase client。
+- 建立 auth nonce / login route。
+- 建立 player、market、friend、expedition controllers 與 services。
+- 建立 Supabase schema 與清除測試資料 SQL。
+- 使用 `@cryptopets/game-content` 驗證素材 ID。
+- 新增 `GET /materials/backpack` 素材背包接口。
+- 素材背包接口已回傳 `local-db` / `chain-db` 來源標記與 chain meta。
 
-## 未完成
+## 待完成
 
-- 正式上鏈合約、indexer、relayer 尚未串接。
-- API response 格式尚未統一。
-- integration tests 與 CI 尚未建立。
-- 探險規則仍是簡化計算。
-- production logging、rate limit、monitoring 尚未完成。
+- 將 `chain-db` 模式接入 ERC-1155 / indexer。
+- 將寵物 NFT ownership 接入 ERC-721 / indexer。
+- 建立 API integration tests 與 CI。
+- 強化 zod validation、rate limit、production logging。
+- 補齊 migration、seed、RLS 與監控。

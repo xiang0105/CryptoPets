@@ -5,6 +5,7 @@ export interface AppMessages {
     home: string
     pet: string
     store: string
+    inventory: string
   }
   actions: {
     music: string
@@ -91,6 +92,24 @@ export interface StoreMessages {
   close: string
 }
 
+export interface InventoryMessages {
+  title: string
+  coins: string
+  gridLabel: string
+  emptySlot: string
+  details: string
+  materialInfo: string
+  emptyName: string
+  emptyDescription: string
+  stackLimit: string
+  value: string
+  origin: string
+  chainReserved: string
+  discard: string
+  use: string
+  sellAll: string
+}
+
 export interface PetsMessages {
   teamTitle: string
   expeditionTeam: string
@@ -134,5 +153,6 @@ export interface GameMessages {
   app: AppMessages
   home: HomeMessages
   store: StoreMessages
+  inventory: InventoryMessages
   pets: PetsMessages
 }

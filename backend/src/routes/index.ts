@@ -4,6 +4,7 @@ import { addFriendController, getFriendsController } from '../controllers/friend
 import {
   buyListingController,
   cancelListingController,
+  getMaterialBackpackController,
   getMarketListingsController,
   getResourcesController,
   getTransactionsController,
@@ -20,6 +21,7 @@ routes.get('/health', (_request, response) => response.json({ ok: true }))
 routes.use('/auth', authRoutes)
 routes.get('/player', requireAuth, asyncHandler(getPlayerController))
 routes.get('/resources', requireAuth, asyncHandler(getResourcesController))
+routes.get('/materials/backpack', requireAuth, asyncHandler(getMaterialBackpackController))
 routes.post('/start-expedition', requireAuth, asyncHandler(startExpeditionController))
 routes.post('/claim-reward', requireAuth, asyncHandler(claimRewardController))
 routes.get('/market/listings', requireAuth, asyncHandler(getMarketListingsController))

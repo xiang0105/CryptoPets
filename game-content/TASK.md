@@ -1,20 +1,16 @@
-# Game Content TASK
+# 遊戲內容任務狀態
 
 ## 已完成
 
-- 建立 `@cryptopets/game-content` workspace。
-- 建立水豚角色、材料、探險劇本三個內容模組。
-- 建立素材資料夾 `assets/capybaras/` 與 `assets/goodies/`。
-- 前端與後端都可引用此 workspace。
-- 補齊 game-content README、TODO、TASK。
-- 標準化未引用素材的英文 kebab-case 檔名。
-- 新增 `src/lang/`，提供 `zh-TW` 與 `en` 語言字典。
-- 收納前端品牌圖、地圖與背景音樂。
+- 建立 game-content workspace。
+- 建立寵物、素材、故事與語系資料。
+- 建立素材 ID 驗證函式，供後端市場與背包接口使用。
+- 建立 `assets/` 靜態素材目錄。
+- 加入背包導覽與素材背包頁面文案。
 
-## 未完成
+## 待完成
 
-- 繁中劇本文案需要重新校對。
-- 剩餘前端組合文字尚未全部搬入語言字典。
-- 素材與材料定義尚未完整對應。
-- metadata 產生流程尚未建立。
-- 尚未建立素材命名檢查與引用檢查。
+- 補齊正式素材定義與素材圖。
+- 整理繁中與英文文案品質。
+- 將素材 metadata 與鏈上 token id / contract mapping 對齊。
+- 補齊內容資料測試與 schema 檢查。

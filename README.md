@@ -1,34 +1,36 @@
 # CryptoPets 專案說明
 
-CryptoPets 是水豚寵物養成、遠征與素材交易遊戲。專案採 npm workspaces，分成前端、後端、遊戲內容與共用型別，讓每個部分的責任保持清楚。
+CryptoPets 是一個以錢包登入、寵物養成、遠征、素材背包與市場交易為核心的 Web3 遊戲原型。專案採 npm workspaces 管理前端、後端、共用型別與遊戲內容。
 
-## 分工
+## 工作區
 
-- `frontend/`：只負責畫面顯示、使用者互動、錢包連線入口、呼叫後端 API。圖片、音訊與語言字典都要從 `game-content` 取得。
-- `backend/`：負責 API、驗證、資料庫讀寫、遊戲機制、遠征計算、市場交易，以及未來上鏈接口。
-- `game-content/`：負責角色、素材、劇本、語言字典、圖片、音訊、地圖與品牌資源。
-- `shared/`：只放前後端共用 TypeScript 型別，不放業務邏輯。
+- `frontend/`：Vue 3 + Vite + TypeScript 前端。
+- `backend/`：Express + TypeScript API server，連接 Supabase。
+- `game-content/`：遊戲設定、語系文案與靜態素材。
+- `shared/`：前後端共用 TypeScript 型別。
 
 ## 資料來源策略
 
-目前上鏈尚未實作，所以玩家資產暫時以本地或資料庫資料代替。未來正式上鏈後：
+- 測試階段：前端使用本地測試資料，後端使用資料庫資料。
+- 正式階段：後端會整合鏈上資料與資料庫資料，鏈上作為資產所有權與素材餘額來源，資料庫保存玩家狀態、交易紀錄與可索引快取。
+- 素材背包目前使用 `GET /materials/backpack` 的保留接口，回傳資料來源標記；測試預設為 `local-db`，正式可切換為 `chain-db`。
 
-- 錢包 address 代表玩家身份。
-- 鏈上會提供玩家擁有哪些水豚 NFT。
-- 鏈上會提供玩家身上有哪些素材或道具。
-- 後端資料庫主要保存遊戲機制資料，例如商品市場、遠征紀錄、交易紀錄、好友關係、快取與索引。
-- 前端永遠只向後端或 `game-content` 取資料，不直接判斷正式資產所有權。
+## 素材背包
 
-## Env 總覽
+- 前端已依 `game-content/assets/example/Material backpack.png` 建立 `/inventory` 頁面。
+- 測試階段不顯示素材圖，僅呈現與市場一致的空格子。
+- 後端已預留素材背包 API，未來接上鏈上 ERC-1155 / indexer 後會回填使用者素材資訊。
 
-根目錄提供 `.env.example` 作為總覽範本，但實際開發時請分別建立：
+## 環境設定
 
-- `frontend/.env`：只放會進入瀏覽器的 `VITE_` 變數。
-- `backend/.env`：放後端 secret、Supabase service role key、JWT secret、RPC key。
+請依需求建立：
 
-前端環境變數會被打包到瀏覽器，因此不能放私鑰、service role key、JWT secret 或付費 RPC secret。
+- `frontend/.env`
+- `backend/.env`
 
-## 開發指令
+前端只放公開設定與 `VITE_` 變數；後端保存 Supabase service role、JWT secret、RPC key 等敏感資訊。
+
+## 常用指令
 
 ```bash
 npm install
@@ -38,14 +40,14 @@ npm run build
 npm run type-check
 ```
 
-預設服務：
+預設本機網址：
 
-- Frontend: `http://localhost:5400`
-- Backend: `http://localhost:3400`
+- 前端：`http://localhost:5400`
+- 後端：`http://localhost:3400`
 
-## 文件索引
+## 文件
 
-- 整體：`README.md`、`TODO.md`、`TASK.md`
-- 前端：`frontend/README.md`、`frontend/TODO.md`、`frontend/TASK.md`
-- 後端：`backend/README.md`、`backend/TODO.md`、`backend/TASK.md`
-- 遊戲內容：`game-content/README.md`、`game-content/TODO.md`、`game-content/TASK.md`
+- 根目錄：`README.md`、`TASK.md`、`TODO.md`
+- 前端：`frontend/README.md`、`frontend/TASK.md`、`frontend/TODO.md`
+- 後端：`backend/README.md`、`backend/TASK.md`、`backend/TODO.md`
+- 遊戲內容：`game-content/README.md`、`game-content/TASK.md`、`game-content/TODO.md`

@@ -1,25 +1,32 @@
-# CryptoPets 整體 TODO
+# CryptoPets TODO
 
-## 架構與邊界
+## 資料與接口
 
-- 將 `frontend/src/data/` 的測試暫存收斂成明確的 mock/dev adapter，正式資料一律走後端 API。
-- 建立 API response 統一格式，例如 `{ success, data, error }`。
-- 為前端、後端、game-content 補上自動化測試與 CI。
-- 把剩餘硬編碼或亂碼文案搬進 `game-content/src/lang/`，維持繁中與英文雙語來源。
-- 建立檢查腳本，禁止前端新增 PNG/JPG/SVG/MP3 等資源檔，所有素材需進 `game-content/assets/`。
-- 補上部署環境區分：development、staging、production。
+- 將 `GET /materials/backpack` 從 `local-db` 測試來源切換為 `chain-db` 正式來源。
+- 建立素材 ERC-1155 / indexer 讀取流程。
+- 建立寵物 ERC-721 ownership 讀取流程。
+- 統一 API response envelope，例如 `{ success, data, error }`。
+- 補齊 request body、params、query 的 zod validation。
+- 建立 token metadata 快取與同步策略。
 
-## 上鏈與資料同步
+## 前端
 
-- 設計 ERC-721 寵物 NFT 合約接口。
-- 設計 ERC-1155 素材 SFT 合約接口。
-- 建立 token metadata 產生與保存策略。
-- 建立鏈上事件 indexer，將 mint、transfer、claim、market settlement 同步回後端。
-- 決定是否需要後端 relayer 或玩家自付 gas 的交易流程。
+- 將 `src/data/` 測試資料整理為 dev-only adapter。
+- 將 Inventory 空格替換為後端素材資料渲染。
+- 補齊 API loading、error、retry、empty state。
+- 補齊 i18n 文案與文字溢位檢查。
+- 建立 component tests 與 E2E smoke tests。
 
-## 專案衛生
+## 後端
 
-- 補 `.env` 實際設定檢查清單。
-- 增加 lint / format 工具，統一程式與文件風格。
-- 定期清理 `dist/`、過期測試資料與未引用素材。
-- 補上 README 中各模組的維護負責範圍。
+- 接入鏈上 NFT/SFT ownership 與 material balance。
+- 建立 indexer / relayer / settlement 流程。
+- 補齊 API integration tests。
+- 強化 Supabase migration、seed、RLS。
+- 加上 request id、結構化 logging、rate limit、monitoring。
+
+## 文件與維運
+
+- 持續保持 README、TASK、TODO 使用繁體中文。
+- 補齊 development、staging、production 設定說明。
+- 建立 CI 的 build、type-check、test 檢查。

@@ -73,6 +73,18 @@ export interface PlayerResources {
   inventory: InventoryItem[]
 }
 
+export type MaterialBackpackSource = 'local-db' | 'chain-db'
+
+export interface MaterialBackpack extends PlayerResources {
+  source: MaterialBackpackSource
+  syncedAt: string
+  chain: {
+    enabled: boolean
+    chainId: number
+    materialContractAddress: WalletAddress | null
+  }
+}
+
 export type MarketListingStatus = 'active' | 'sold' | 'cancelled'
 
 export interface MarketListing {

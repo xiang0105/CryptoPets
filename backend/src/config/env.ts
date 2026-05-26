@@ -12,6 +12,8 @@ const envSchema = z.object({
   WEB3_LOGIN_STATEMENT: z.string().default('Sign in to CryptoPets'),
   RPC_URL: z.string().url().optional(),
   NFT_CONTRACT_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional(),
+  MATERIAL_BACKPACK_SOURCE: z.enum(['local-db', 'chain-db']).default('local-db'),
+  MATERIAL_CONTRACT_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional(),
   CHAIN_ID: z.coerce.number().int().positive().default(1),
 })
 

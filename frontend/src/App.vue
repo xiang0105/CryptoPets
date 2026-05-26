@@ -16,6 +16,7 @@ const menuItems = computed(() => [
   { label: currentMessages.value.app.nav.home, to: '/' },
   { label: currentMessages.value.app.nav.pet, to: '/pet' },
   { label: currentMessages.value.app.nav.store, to: '/store' },
+  { label: currentMessages.value.app.nav.inventory, to: '/inventory' },
 ])
 
 const actionItems = computed(() => [
@@ -42,7 +43,7 @@ const { walletAddress, walletError, shortWalletAddress, connectWallet, restoreSe
 const route = useRoute()
 const router = useRouter()
 const slideDirection = ref<'left' | 'right'>('left')
-const pageOrder = ['/', '/pet', '/store']
+const pageOrder = ['/', '/pet', '/store', '/inventory']
 
 const markdown = new MarkdownIt({
   html: false,
@@ -454,11 +455,11 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 108px;
+  min-width: 92px;
   height: 49px;
-  padding: 0 18px;
+  padding: 0 12px;
   color: #2f7180;
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 900;
   line-height: 1;
   letter-spacing: 0;
@@ -481,7 +482,7 @@ onBeforeUnmount(() => {
 
 .nav-tab.router-link-exact-active {
   z-index: 2;
-  min-width: 154px;
+  min-width: 124px;
   height: 62px;
   margin-bottom: -18px;
   color: #d9792f;

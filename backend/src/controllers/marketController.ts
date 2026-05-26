@@ -2,6 +2,7 @@ import type { Request, Response } from 'express'
 import {
   buyListing,
   cancelListing,
+  getMaterialBackpack,
   getMarketListings,
   getPlayerResources,
   getPlayerTransactions,
@@ -10,6 +11,10 @@ import {
 
 export async function getResourcesController(request: Request, response: Response) {
   response.json(await getPlayerResources(request.auth!.userId))
+}
+
+export async function getMaterialBackpackController(request: Request, response: Response) {
+  response.json(await getMaterialBackpack(request.auth!.userId))
 }
 
 export async function getMarketListingsController(_request: Request, response: Response) {

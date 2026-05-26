@@ -6,6 +6,7 @@ export const en: GameMessages = {
       home: 'Home',
       pet: 'Pet',
       store: 'Store',
+      inventory: 'Inventory',
     },
     actions: {
       music: 'Music',
@@ -30,7 +31,7 @@ export const en: GameMessages = {
     },
     help: {
       title: 'Help',
-      markdown: '# CryptoPets Help\n\nConnect a wallet to enter the testing flow. Production player data will come from the backend API and on-chain sources.\n\n- Home: choose a forest and watch expedition status.\n- Pet: inspect teams, pet details, and upgrades.\n- Store: browse materials, listings, and transaction activity.',
+      markdown: '# CryptoPets Help\n\nConnect a wallet to enter the testing flow. Production player data will come from the backend API and on-chain sources.\n\n- Home: choose a forest and watch expedition status.\n- Pet: inspect teams, pet details, and upgrades.\n- Store: browse materials, listings, and transaction activity.\n- Inventory: view reserved material slots while on-chain material loading is disabled for testing.',
     },
     starterGift: {
       title: 'Testing Starter Pets',
@@ -88,6 +89,24 @@ export const en: GameMessages = {
     noMaterial: 'No material available to list.',
     select: 'Select',
     close: 'Close',
+  },
+  inventory: {
+    title: "CAPY'S INVENTORY & MATERIALS",
+    coins: 'Coins',
+    gridLabel: 'Material backpack grid',
+    emptySlot: 'Empty material slot',
+    details: 'Item Details',
+    materialInfo: 'MATERIAL INFO',
+    emptyName: 'Empty Slot',
+    emptyDescription:
+      'Materials will appear here after the backend enables on-chain user material lookup. Testing currently keeps every slot empty.',
+    stackLimit: 'Stack Limit:',
+    value: 'Value:',
+    origin: 'Origin:',
+    chainReserved: 'Reserved for on-chain material data',
+    discard: 'Discard',
+    use: 'Use',
+    sellAll: 'Sell All',
   },
   pets: {
     teamTitle: 'Team',

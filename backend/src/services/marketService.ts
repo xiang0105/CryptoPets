@@ -1,6 +1,13 @@
 import { z } from 'zod'
-import type { MarketListing, PlayerResources, PlayerTransaction } from '@cryptopets/shared'
+import type {
+  MarketListing,
+  MaterialBackpack,
+  PlayerResources,
+  PlayerTransaction,
+  WalletAddress,
+} from '@cryptopets/shared'
 import { isKnownMaterialId } from '@cryptopets/game-content'
+import { env } from '../config/env.js'
 import { supabase } from '../config/supabase.js'
 import { HttpError } from '../utils/httpError.js'
 
@@ -36,6 +43,25 @@ export async function getPlayerResources(userId: string): Promise<PlayerResource
       updatedAt: item.updated_at,
     })),
   }
+}
+
+export async function getMaterialBackpack(userId: string): Promise<MaterialBackpack> {
+  const resources = await getPlayerResources(userId)
+
+  return {
+    ...resources,
+    source: env.MATERIAL_BACKPACK_SOURCE,
+    syncedAt: new Date().toISOString(),
+    chain: {
+      enabled: env.MATERIAL_BACKPACK_SOURCE === 'chain-db',
+      chainId: env.CHAIN_ID,
+      materialContractAddress: toWalletAddress(env.MATERIAL_CONTRACT_ADDRESS),
+    },
+  }
+}
+
+function toWalletAddress(address: string | undefined): WalletAddress | null {
+  return address ? (address as WalletAddress) : null
 }
 
 export async function getMarketListings(): Promise<MarketListing[]> {
