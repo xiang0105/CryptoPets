@@ -4,6 +4,7 @@ import type { ExpeditionReward, ExpeditionSummary } from '@cryptopets/shared'
 import { materialIds } from '@cryptopets/game-content'
 import { supabase } from '../config/supabase.js'
 import { HttpError } from '../utils/httpError.js'
+import { materialBalanceProvider } from './materialBalanceProvider.js'
 
 const startExpeditionSchema = z.object({
   petIds: z.array(z.string().uuid()).min(1).max(4),
@@ -160,7 +161,9 @@ function calculateReward(
 
 async function applyPlayerReward(userId: string, expeditionId: string, reward: ExpeditionReward) {
   await addCoins(userId, reward.coins)
-  await Promise.all(reward.materials.map((material) => addMaterial(userId, material.id, material.count)))
+  await Promise.all(
+    reward.materials.map((material) => materialBalanceProvider.increase(userId, material.id, material.count)),
+  )
 
   const { error } = await supabase.from('transactions').insert({
     user_id: userId,
@@ -199,31 +202,6 @@ async function addCoins(userId: string, coins: number) {
 
   if (error) {
     throw new HttpError(500, 'CURRENCY_UPDATE_FAILED')
-  }
-}
-
-async function addMaterial(userId: string, materialId: string, count: number) {
-  const { data: inventoryItem, error: lookupError } = await supabase
-    .from('inventory')
-    .select('amount')
-    .eq('user_id', userId)
-    .eq('material_id', materialId)
-    .maybeSingle()
-
-  if (lookupError) {
-    throw new HttpError(500, 'INVENTORY_LOOKUP_FAILED')
-  }
-
-  const nextAmount = (inventoryItem?.amount ?? 0) + count
-  const { error } = await supabase.from('inventory').upsert({
-    user_id: userId,
-    material_id: materialId,
-    amount: nextAmount,
-    updated_at: new Date().toISOString(),
-  })
-
-  if (error) {
-    throw new HttpError(500, 'INVENTORY_UPDATE_FAILED')
   }
 }
 

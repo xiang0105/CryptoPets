@@ -10,6 +10,7 @@ import { isKnownMaterialId } from '@cryptopets/game-content'
 import { env } from '../config/env.js'
 import { supabase } from '../config/supabase.js'
 import { HttpError } from '../utils/httpError.js'
+import { materialBalanceProvider } from './materialBalanceProvider.js'
 
 const listMaterialSchema = z.object({
   materialId: z.string().min(1).max(64).refine(isKnownMaterialId, 'UNKNOWN_MATERIAL_ID'),
@@ -22,26 +23,18 @@ const listingIdSchema = z.object({
 })
 
 export async function getPlayerResources(userId: string): Promise<PlayerResources> {
-  const [currencyResult, inventoryResult] = await Promise.all([
+  const [currencyResult, inventory] = await Promise.all([
     supabase.from('currencies').select('coins').eq('user_id', userId).maybeSingle(),
-    supabase.from('inventory').select('material_id,amount,updated_at').eq('user_id', userId).order('material_id'),
+    materialBalanceProvider.listBalances(userId),
   ])
 
   if (currencyResult.error) {
     throw new HttpError(500, 'CURRENCY_LOOKUP_FAILED')
   }
 
-  if (inventoryResult.error) {
-    throw new HttpError(500, 'INVENTORY_LOOKUP_FAILED')
-  }
-
   return {
     coins: currencyResult.data?.coins ?? 0,
-    inventory: (inventoryResult.data ?? []).map((item) => ({
-      materialId: item.material_id,
-      amount: item.amount,
-      updatedAt: item.updated_at,
-    })),
+    inventory,
   }
 }
 
@@ -103,7 +96,7 @@ export async function getPlayerTransactions(userId: string): Promise<PlayerTrans
 
 export async function listMaterial(userId: string, input: unknown): Promise<MarketListing> {
   const body = listMaterialSchema.parse(input)
-  await changeMaterial(userId, body.materialId, -body.amount)
+  await materialBalanceProvider.decrease(userId, body.materialId, body.amount)
 
   const { data: listing, error } = await supabase
     .from('market_listings')
@@ -118,7 +111,7 @@ export async function listMaterial(userId: string, input: unknown): Promise<Mark
     .single()
 
   if (error || !listing) {
-    await changeMaterial(userId, body.materialId, body.amount)
+    await materialBalanceProvider.increase(userId, body.materialId, body.amount)
     throw new HttpError(500, 'MARKET_LISTING_CREATE_FAILED')
   }
 
@@ -153,7 +146,7 @@ export async function cancelListing(userId: string, input: unknown): Promise<Mar
     throw new HttpError(409, 'MARKET_LISTING_CANCEL_CONFLICT')
   }
 
-  await changeMaterial(userId, listing.material_id, listing.amount)
+  await materialBalanceProvider.increase(userId, listing.material_id, listing.amount)
   await recordTransaction(userId, {
     listingId: listing.id,
     action: 'cancel',
@@ -194,7 +187,7 @@ export async function buyListing(userId: string, input: unknown): Promise<Market
 
   await Promise.all([
     changeCoins(listing.seller_id, listing.price),
-    changeMaterial(userId, listing.material_id, listing.amount),
+    materialBalanceProvider.increase(userId, listing.material_id, listing.amount),
     recordTransaction(userId, {
       listingId: listing.id,
       counterpartyId: listing.seller_id,
@@ -262,36 +255,6 @@ async function changeCoins(userId: string, delta: number) {
 
   if (updateError) {
     throw new HttpError(500, 'CURRENCY_UPDATE_FAILED')
-  }
-}
-
-async function changeMaterial(userId: string, materialId: string, delta: number) {
-  const { data, error } = await supabase
-    .from('inventory')
-    .select('amount')
-    .eq('user_id', userId)
-    .eq('material_id', materialId)
-    .maybeSingle()
-
-  if (error) {
-    throw new HttpError(500, 'INVENTORY_LOOKUP_FAILED')
-  }
-
-  const nextAmount = (data?.amount ?? 0) + delta
-
-  if (nextAmount < 0) {
-    throw new HttpError(409, 'INSUFFICIENT_MATERIAL')
-  }
-
-  const { error: updateError } = await supabase.from('inventory').upsert({
-    user_id: userId,
-    material_id: materialId,
-    amount: nextAmount,
-    updated_at: new Date().toISOString(),
-  })
-
-  if (updateError) {
-    throw new HttpError(500, 'INVENTORY_UPDATE_FAILED')
   }
 }
 

@@ -1,20 +1,46 @@
 # CryptoPets 前端說明
 
-前端使用 Vue 3、Vite 與 TypeScript，負責遊戲介面、錢包登入、測試資料展示與後端 API 串接。
+`frontend` 是 CryptoPets 的玩家介面，使用 Vue 3、Vite 與 TypeScript。前端負責遊戲畫面、錢包連線、玩家操作流程、測試資料展示，以及呼叫後端 API 取得彙整後的遊戲狀態。
 
-## 功能
+前端不應直接決定玩家是否擁有鏈上資產。正式資料來源應以後端 API 為準；前端可以讀取錢包地址與發起簽名，但 Pet NFT ownership、Material balance、遠征結果與市場狀態都應由後端驗證與回傳。
 
-- 首頁：遠征選擇與狀態展示。
-- 寵物頁：隊伍、寵物資料、升級與突破介面。
-- 商店頁：素材商品、上架、購買與交易狀態。
-- 背包頁：依素材背包參考圖製作，測試階段只顯示空素材格。
-- 錢包登入：MetaMask 連線；測試階段可使用 frontend-only flow。
+## 前端負責事項
 
-## 資料來源
+- 顯示首頁、寵物、商店、背包等遊戲頁面。
+- 提供 MetaMask 錢包連線與簽名登入流程。
+- 呼叫 `src/api/` 中的 API client 與後端交換資料。
+- 使用 `@cryptopets/game-content` 取得寵物、素材、語系與資產路徑。
+- 使用 `@cryptopets/shared` 的共用型別，保持 API response 與後端一致。
+- 管理測試階段的 frontend-only flow 與本地展示資料。
+- 呈現 loading、error、empty state 與行動裝置版面。
 
-- 測試階段：前端使用本地資料 provider，素材背包維持空格。
-- 後端資料：透過 `src/api/` 呼叫 Express API。
-- 正式階段：素材與寵物資產由後端彙整鏈上資料與資料庫資料後提供。
+## 資料夾階層
+
+```text
+frontend/
+├── public/             靜態公開檔案，例如 favicon
+├── src/
+│   ├── api/            後端 API client，包含 auth 與 game API
+│   ├── assets/         前端 CSS 與畫面樣式
+│   ├── composables/    Vue composables，例如錢包連線
+│   ├── content/        game-content asset mapping
+│   ├── data/           測試資料與 dev-only adapter
+│   ├── router/         Vue Router 路由設定
+│   ├── state/          前端測試狀態與頁面暫存狀態
+│   ├── views/          Home、Pets、Store、Inventory 頁面
+│   └── web3/           鏈上資料 provider 介面與本地測試實作
+├── index.html          Vite 入口 HTML
+├── vite.config.ts      Vite 設定
+└── package.json        前端 workspace scripts 與依賴
+```
+
+## API 調用規則
+
+- 所有後端請求集中在 `src/api/`。
+- API response 使用 `camelCase`。
+- API 路徑沿用目前後端定義，不在前端自行改名。
+- 錢包簽名登入使用後端 nonce 與 login API。
+- 正式階段的寵物與素材資料應由後端回傳，前端不自行判定鏈上 ownership 或 balance。
 
 ## 環境變數
 
@@ -30,22 +56,9 @@ VITE_NFT_CONTRACT_ADDRESS=0x0000000000000000000000000000000000000000
 VITE_MATERIAL_CONTRACT_ADDRESS=0x0000000000000000000000000000000000000000
 ```
 
-## 目錄
+前端只放公開設定與 `VITE_` 變數，不放 Supabase service role、JWT secret、RPC private key 或任何後端密鑰。
 
-```text
-src/
-  api/          後端 API client
-  assets/       前端 CSS
-  composables/  Vue composables
-  content/      game-content asset mapping
-  data/         測試資料與 dev-only adapter
-  router/       Vue Router
-  state/        前端測試狀態
-  views/        Home、Pet、Store、Inventory 頁面
-  web3/         鏈上資料 provider 介面與本地測試實作
-```
-
-## 指令
+## 開發指令
 
 ```bash
 npm run dev:frontend

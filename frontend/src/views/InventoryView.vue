@@ -1,23 +1,77 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { currentMessages } from '@/i18n'
 
 const text = computed(() => currentMessages.value.inventory)
 const slotCount = 30
+const shelfPageSize = 16
 const selectedSlot = ref(0)
+const shelfPage = ref(0)
+const shelfDirection = ref<'prev' | 'next'>('next')
+const shelfSwitching = ref(false)
 const emptySlots = computed(() => Array.from({ length: slotCount }, (_, index) => index))
+const shelfTotalPages = computed(() => Math.max(1, Math.ceil(emptySlots.value.length / shelfPageSize)))
+const hasPreviousShelfPage = computed(() => shelfPage.value > 0)
+const hasNextShelfPage = computed(() => shelfPage.value < shelfTotalPages.value - 1)
+const shelfSlots = computed(() => {
+  const start = shelfPage.value * shelfPageSize
+  const visibleSlots = emptySlots.value.slice(start, start + shelfPageSize)
+  const emptySlotCount = Math.max(0, shelfPageSize - visibleSlots.length)
+
+  return [...visibleSlots, ...Array.from({ length: emptySlotCount }, (_, index) => start + visibleSlots.length + index)]
+})
+let shelfSwitchTimer: number | undefined
 
 function selectSlot(index: number) {
   selectedSlot.value = index
 }
+
+function goShelfPage(direction: -1 | 1) {
+  const nextPage = shelfPage.value + direction
+
+  if (nextPage < 0 || nextPage >= shelfTotalPages.value) {
+    return
+  }
+
+  shelfDirection.value = direction > 0 ? 'next' : 'prev'
+  shelfSwitching.value = false
+  shelfPage.value = nextPage
+
+  window.clearTimeout(shelfSwitchTimer)
+  window.requestAnimationFrame(() => {
+    shelfSwitching.value = true
+    shelfSwitchTimer = window.setTimeout(() => {
+      shelfSwitching.value = false
+    }, 360)
+  })
+}
+
+onBeforeUnmount(() => {
+  window.clearTimeout(shelfSwitchTimer)
+})
 </script>
 
 <template>
   <section class="inventory-view-root" aria-labelledby="inventory-title">
     <div class="inventory-page">
-      <section class="inventory-shelf" :aria-label="text.gridLabel">
+      <section
+        class="inventory-shelf"
+        :class="[`switch-${shelfDirection}`, { 'is-switching': shelfSwitching }]"
+        :data-page="shelfPage"
+        :aria-label="text.gridLabel"
+      >
         <button
-          v-for="slot in emptySlots"
+          v-if="hasPreviousShelfPage"
+          class="shelf-nav shelf-nav-prev"
+          type="button"
+          aria-label="Previous material page"
+          @click="goShelfPage(-1)"
+        >
+          <FontAwesomeIcon icon="chevron-left" aria-hidden="true" />
+        </button>
+
+        <button
+          v-for="slot in shelfSlots"
           :key="slot"
           class="material-slot"
           :class="{ selected: selectedSlot === slot }"
@@ -28,7 +82,17 @@ function selectSlot(index: number) {
           <span class="slot-placeholder" aria-hidden="true"></span>
         </button>
 
-        <div class="shelf-page-indicator" aria-live="polite">1 / 1</div>
+        <button
+          v-if="hasNextShelfPage"
+          class="shelf-nav shelf-nav-next"
+          type="button"
+          aria-label="Next material page"
+          @click="goShelfPage(1)"
+        >
+          <FontAwesomeIcon icon="chevron-right" aria-hidden="true" />
+        </button>
+
+        <div class="shelf-page-indicator" aria-live="polite">{{ shelfPage + 1 }} / {{ shelfTotalPages }}</div>
       </section>
 
       <aside class="inventory-detail" aria-labelledby="inventory-detail-title">
@@ -142,13 +206,13 @@ function selectSlot(index: number) {
 .inventory-shelf {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  grid-template-rows: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: repeat(4, minmax(0, 1fr));
   align-items: stretch;
   gap: 10px;
   align-self: stretch;
   min-height: 0;
-  padding: 22px 34px 42px;
+  padding: 22px 34px 13px;
   overflow: visible;
   background:
     linear-gradient(90deg, #6f3f22 0 8px, transparent 8px calc(100% - 8px), #6f3f22 calc(100% - 8px)),
@@ -166,6 +230,39 @@ function selectSlot(index: number) {
     inset 0 0 0 3px #bd8654,
     inset 0 0 18px rgba(61, 31, 16, 0.5),
     0 3px 0 rgba(79, 45, 23, 0.24);
+}
+
+.shelf-nav {
+  position: absolute;
+  top: 26%;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 82px;
+  color: #fff7df;
+  cursor: pointer;
+  background: linear-gradient(#b97843, #8f552e);
+  border: 5px solid #6e3d23;
+  border-radius: 14px;
+  box-shadow:
+    inset 0 0 0 3px rgba(255, 225, 166, 0.45),
+    0 4px 0 rgba(55, 33, 23, 0.24);
+  transform: translateY(-50%);
+}
+
+.shelf-nav svg {
+  font-size: 35px;
+  filter: drop-shadow(0 2px 0 rgba(74, 43, 25, 0.55));
+}
+
+.shelf-nav-prev {
+  left: -33px;
+}
+
+.shelf-nav-next {
+  right: -33px;
 }
 
 .material-slot {
@@ -186,6 +283,14 @@ function selectSlot(index: number) {
   box-shadow:
     inset 0 0 0 2px #fff8de,
     0 3px 0 rgba(55, 33, 23, 0.22);
+}
+
+.inventory-shelf.is-switching .material-slot {
+  animation: shelf-card-next 320ms ease both;
+}
+
+.inventory-shelf.is-switching.switch-prev .material-slot {
+  animation-name: shelf-card-prev;
 }
 
 .material-slot.selected {
@@ -344,7 +449,7 @@ function selectSlot(index: number) {
 .detail-body dl {
   grid-area: meta;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* grid-template-columns: repeat(2, minmax(0, 1fr)); */
   gap: 7px;
   width: 100%;
   padding-top: 4px;
@@ -415,6 +520,30 @@ function selectSlot(index: number) {
   border-color: #6f8b41;
 }
 
+@keyframes shelf-card-next {
+  from {
+    opacity: 0;
+    transform: translateX(28px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes shelf-card-prev {
+  from {
+    opacity: 0;
+    transform: translateX(-28px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
 @media (min-width: 1200px) {
   .inventory-shelf {
     min-height: 620px;
@@ -429,11 +558,10 @@ function selectSlot(index: number) {
   }
 
   .inventory-shelf {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    grid-template-rows: none;
-    grid-auto-rows: minmax(132px, auto);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-rows: repeat(4, minmax(104px, 1fr));
     min-height: 0;
-    padding: 22px 34px 42px;
+    padding: 22px 34px 18px;
   }
 
   .inventory-detail {
@@ -472,9 +600,8 @@ function selectSlot(index: number) {
   }
 
   .inventory-shelf {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    grid-template-rows: none;
-    grid-auto-rows: minmax(116px, auto);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-rows: repeat(4, minmax(70px, 1fr));
     gap: 8px;
     min-height: auto;
     padding: 16px 18px 42px;
@@ -482,7 +609,8 @@ function selectSlot(index: number) {
   }
 
   .material-slot {
-    min-height: 116px;
+    min-height: 70px;
+    padding: 4px;
     border-width: 3px;
   }
 
@@ -501,6 +629,20 @@ function selectSlot(index: number) {
     min-width: 52px;
     font-size: 13px;
     transform: translateX(50%);
+  }
+
+  .shelf-nav {
+    width: 42px;
+    height: 58px;
+    border-width: 4px;
+  }
+
+  .shelf-nav-prev {
+    left: -18px;
+  }
+
+  .shelf-nav-next {
+    right: -18px;
   }
 }
 </style>
