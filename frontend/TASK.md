@@ -17,7 +17,7 @@
 
 ## 待完成：MVP
 
-- [ ] 將 Inventory 頁面正式串接 `getMaterialBackpack()`。
+- [x] 將 Inventory 頁面正式串接 `getMaterialBackpack()`。
 - [ ] 補齊所有 API 的 loading、error、retry、empty state。
 - [ ] 將 Pets 頁面的寵物資料來源改為後端彙整資料。
 - [ ] 將 Store 頁面的市場掛單、上架、購買、取消流程完整串接後端。
