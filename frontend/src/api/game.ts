@@ -21,7 +21,7 @@ export function getMaterialBackpack() {
   return apiRequest<MaterialBackpack>('/materials/backpack')
 }
 
-export function startExpedition(petIds: string[], expeditionType = 'forest') {
+export function startExpedition(petIds: string[], expeditionType = 'orange') {
   return apiRequest<ExpeditionSummary>('/start-expedition', {
     method: 'POST',
     body: JSON.stringify({ petIds, expeditionType }),

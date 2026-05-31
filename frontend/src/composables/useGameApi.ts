@@ -8,7 +8,7 @@ import type {
   PlayerResources,
   PlayerTransaction,
 } from '@cryptopets/shared'
-import { materialDefinitions } from '@cryptopets/game-content'
+import { materialDefinitions, starterCapybaraByName } from '@cryptopets/game-content'
 import {
   addFriend,
   buyMarketListing,
@@ -26,11 +26,13 @@ import {
 import type { GoodieSft, ListingStatus } from '@/data/goodies'
 import type { Pet } from '@/data/pets'
 import { replacePets } from '@/data/pets'
+import { getAuthToken } from '@/api/client'
 
 type QueryKey = 'player' | 'resources' | 'backpack' | 'friends' | 'marketListings' | 'transactions'
 type OperationKey = 'startExpedition' | 'claimReward' | 'addFriend' | 'listMarketMaterial' | 'cancelListing' | 'buyListing'
 
 const materialDefinitionById = new Map(materialDefinitions.map((material) => [material.id, material]))
+const FRONTEND_ONLY_AUTH = import.meta.env.VITE_FRONTEND_ONLY_AUTH !== 'false'
 
 const playerProfile = ref<PlayerProfile | null>(null)
 const resources = ref<PlayerResources | null>(null)
@@ -143,6 +145,8 @@ async function runOperation<T>(key: OperationKey, request: () => Promise<T>, fal
 }
 
 function mapPlayerPet(pet: PlayerProfile['pets'][number]): Pet {
+  const contentPet = starterCapybaraByName[pet.name]
+
   return {
     id: pet.id,
     name: pet.name,
@@ -151,6 +155,9 @@ function mapPlayerPet(pet: PlayerProfile['pets'][number]): Pet {
     level: Math.max(0, Math.floor(pet.exp.current / Math.max(1, pet.exp.next))),
     tokenURI: pet.tokenUri,
     stats: { ...pet.stats },
+    profile: contentPet ? { ...contentPet.profile } : undefined,
+    leaderSkill: contentPet ? { ...contentPet.leaderSkill } : undefined,
+    skills: contentPet?.skills.map((skill) => ({ ...skill })),
     exp: { ...pet.exp },
     owner: pet.contractAddress,
     birthTime: pet.birthTime,
@@ -195,7 +202,17 @@ function materialInventoryItemToGoodie(materialId: string, amount: number): Good
   }
 }
 
+function shouldUseProtectedApi() {
+  return Boolean(getAuthToken())
+}
+
 async function loadPlayerProfile() {
+  if (!shouldUseProtectedApi()) {
+    queryError.player = ''
+    activeExpedition.value = null
+    return playerProfile.value
+  }
+
   return runQuery(
     'player',
     getPlayer,
@@ -209,12 +226,34 @@ async function loadPlayerProfile() {
 }
 
 async function loadResources() {
+  if (!shouldUseProtectedApi()) {
+    queryError.resources = ''
+    resources.value = resources.value ?? { coins: 0, inventory: [] }
+    return resources.value
+  }
+
   return runQuery('resources', getResources, (nextResources) => {
     resources.value = nextResources
   }, 'Resources load failed')
 }
 
 async function loadMaterialBackpack() {
+  if (!shouldUseProtectedApi()) {
+    queryError.backpack = ''
+    materialBackpack.value = materialBackpack.value ?? {
+      coins: resources.value?.coins ?? 0,
+      inventory: resources.value?.inventory ?? [],
+      source: 'local-db',
+      syncedAt: new Date().toISOString(),
+      chain: {
+        enabled: false,
+        chainId: Number(import.meta.env.VITE_CHAIN_ID ?? 1),
+        materialContractAddress: null,
+      },
+    }
+    return materialBackpack.value
+  }
+
   return runQuery('backpack', getMaterialBackpack, (nextBackpack) => {
     materialBackpack.value = nextBackpack
     resources.value = {
@@ -225,18 +264,36 @@ async function loadMaterialBackpack() {
 }
 
 async function loadFriends() {
+  if (!shouldUseProtectedApi()) {
+    queryError.friends = ''
+    friends.value = []
+    return friends.value
+  }
+
   return runQuery('friends', getFriends, (nextFriends) => {
     friends.value = nextFriends
   }, 'Friends load failed')
 }
 
 async function loadMarketListings() {
+  if (!shouldUseProtectedApi()) {
+    queryError.marketListings = ''
+    marketListings.value = []
+    return marketListings.value
+  }
+
   return runQuery('marketListings', getMarketListings, (nextListings) => {
     marketListings.value = nextListings
   }, 'Market listings load failed')
 }
 
 async function loadTransactions() {
+  if (!shouldUseProtectedApi()) {
+    queryError.transactions = ''
+    transactions.value = []
+    return transactions.value
+  }
+
   return runQuery('transactions', getTransactions, (nextTransactions) => {
     transactions.value = nextTransactions
   }, 'Transactions load failed')
@@ -254,6 +311,28 @@ async function loadAllApiData() {
 }
 
 async function startTeamExpedition(petIds: string[], expeditionType: string) {
+  if (!shouldUseProtectedApi() && FRONTEND_ONLY_AUTH) {
+    const now = new Date()
+    const summary: ExpeditionSummary = {
+      id: `local-${now.getTime()}`,
+      petIds,
+      expeditionType: expeditionType as ExpeditionSummary['expeditionType'],
+      startedAt: now.toISOString(),
+      endsAt: new Date(now.getTime() + 60 * 60 * 1000).toISOString(),
+      status: 'started',
+      reward: null,
+    }
+
+    operationError.startExpedition = ''
+    activeExpedition.value = summary
+    return summary
+  }
+
+  if (!shouldUseProtectedApi()) {
+    operationError.startExpedition = 'AUTH_REQUIRED'
+    throw new Error('AUTH_REQUIRED')
+  }
+
   const summary = await runOperation(
     'startExpedition',
     () => startExpedition(petIds, expeditionType),
@@ -265,6 +344,31 @@ async function startTeamExpedition(petIds: string[], expeditionType: string) {
 }
 
 async function claimActiveExpedition(expeditionId: string) {
+  if (!shouldUseProtectedApi() && FRONTEND_ONLY_AUTH) {
+    const summary: ExpeditionSummary = {
+      id: expeditionId,
+      petIds: activeExpedition.value?.petIds ?? [],
+      expeditionType: activeExpedition.value?.expeditionType ?? 'orange',
+      startedAt: activeExpedition.value?.startedAt ?? new Date().toISOString(),
+      endsAt: activeExpedition.value?.endsAt ?? new Date().toISOString(),
+      status: 'claimed',
+      reward: {
+        exp: 120,
+        coins: 60,
+        materials: [],
+      },
+    }
+
+    operationError.claimReward = ''
+    activeExpedition.value = null
+    return summary
+  }
+
+  if (!shouldUseProtectedApi()) {
+    operationError.claimReward = 'AUTH_REQUIRED'
+    throw new Error('AUTH_REQUIRED')
+  }
+
   const summary = await runOperation(
     'claimReward',
     () => claimReward(expeditionId),

@@ -1,13 +1,51 @@
 import type { PlayerProfile } from '@cryptopets/shared'
+import { starterCapybaras } from '@cryptopets/game-content'
+import { env } from '../config/env.js'
 import { supabase } from '../config/supabase.js'
 import { HttpError } from '../utils/httpError.js'
 
 export async function initializePlayerIfNeeded(userId: string) {
-  void userId
-  // Reserved for future chain sync:
-  // 1. Read ERC-721 pet ownership.
-  // 2. Read ERC-1155 material balances.
-  // 3. Mirror only indexable metadata needed by the API.
+  const { count, error: countError } = await supabase
+    .from('pets')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+
+  if (countError) {
+    throw new HttpError(500, 'PETS_LOOKUP_FAILED')
+  }
+
+  if ((count ?? 0) > 0) {
+    return
+  }
+
+  const now = new Date().toISOString()
+  const contractAddress = (env.NFT_CONTRACT_ADDRESS ?? '0x0000000000000000000000000000000000000000').toLowerCase()
+  const pets = starterCapybaras.map((pet) => ({
+    user_id: userId,
+    token_id: `${userId}:${pet.id}`,
+    contract_address: contractAddress,
+    chain_id: env.CHAIN_ID,
+    name: pet.name,
+    element: pet.element,
+    stage: pet.stage,
+    token_uri: pet.tokenURI,
+    stats: pet.stats,
+    exp_current: 0,
+    exp_next: 1000,
+    birth_time: now,
+  }))
+
+  const { error: insertError } = await supabase.from('pets').insert(pets)
+
+  if (insertError) {
+    throw new HttpError(500, 'STARTER_PETS_CREATE_FAILED')
+  }
+
+  await supabase.from('currencies').upsert({
+    user_id: userId,
+    coins: 0,
+    updated_at: now,
+  })
 }
 
 export async function getPlayerProfile(userId: string): Promise<PlayerProfile> {
@@ -33,7 +71,7 @@ export async function getPlayerProfile(userId: string): Promise<PlayerProfile> {
 
   const { data: expedition, error: expeditionError } = await supabase
     .from('expeditions')
-    .select('id,pet_ids,started_at,ends_at,status,reward')
+    .select('id,pet_ids,expedition_type,started_at,ends_at,status,reward')
     .eq('user_id', userId)
     .eq('status', 'started')
     .order('started_at', { ascending: false })
@@ -68,6 +106,7 @@ export async function getPlayerProfile(userId: string): Promise<PlayerProfile> {
       ? {
           id: expedition.id,
           petIds: expedition.pet_ids,
+          expeditionType: expedition.expedition_type,
           startedAt: expedition.started_at,
           endsAt: expedition.ends_at,
           status: expedition.status,

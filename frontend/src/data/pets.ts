@@ -1,4 +1,5 @@
 import { starterCapybaras, type PetElement } from '@cryptopets/game-content'
+import type { LocalizedText, PetSkillDefinition } from '@cryptopets/game-content'
 
 export type { PetElement }
 
@@ -16,6 +17,9 @@ export interface Pet {
     atk: number
     def: number
   }
+  profile?: LocalizedText
+  leaderSkill?: PetSkillDefinition
+  skills?: PetSkillDefinition[]
   exp: {
     current: number
     next: number
@@ -39,6 +43,9 @@ export function createStarterPets(owner: string): Pet[] {
       level: 0,
       tokenURI: pet.tokenURI,
       stats: { ...pet.stats },
+      profile: { ...pet.profile },
+      leaderSkill: { ...pet.leaderSkill },
+      skills: pet.skills.map((skill) => ({ ...skill })),
       exp: { current: 0, next: 1 },
       owner,
       birthTime,
