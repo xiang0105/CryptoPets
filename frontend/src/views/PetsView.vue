@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { goodies } from '@/data/goodies'
 import { pets, type Pet } from '@/data/pets'
+import { useGameApi } from '@/composables/useGameApi'
 import { expeditionTeamIds, isPetInExpeditionTeam, maxTeamSlots, setExpeditionTeamSlot } from '@/state/expeditionTeam'
 import { availableSkillPoints, spendSkillPoint } from '@/state/testProgress'
 import { currentMessages, isZh } from '@/i18n'
@@ -13,11 +14,22 @@ const localPets = ref<Pet[]>(pets.map((pet) => ({
   stats: { ...pet.stats },
   exp: { ...pet.exp },
 })))
+const {
+  friends,
+  operationError,
+  operationLoading,
+  queryError,
+  queryLoading,
+  loadFriends,
+  loadPlayerProfile,
+  requestAddFriend,
+} = useGameApi()
 const selectedPetId = ref(localPets.value[0]?.id ?? '')
 const activeTeamSlotIndex = ref<number | null>(null)
 const petFilterMode = ref<'all' | 'team' | 'available' | 'level'>('all')
 const skillLevels = ref([1, 1])
 const nurtureMessage = ref('')
+const friendWallet = ref('')
 
 const elementLabel: Record<Pet['element'], { zh: string; en: string; mark: string }> = {
   citrus: { zh: '柑橘', en: 'Citrus', mark: 'C' },
@@ -121,6 +133,10 @@ const filterLabel = computed(() => {
 
   return text.value.filterSort
 })
+const isPetProfileLoading = computed(() => queryLoading.player)
+const petProfileError = computed(() => queryError.player)
+const isFriendsLoading = computed(() => queryLoading.friends)
+const friendsError = computed(() => queryError.friends || operationError.addFriend)
 
 function petLevel(pet: Pet) {
   return pet.level
@@ -189,6 +205,44 @@ function confirmBreakthrough() {
   pet.stats.def += 5
   nurtureMessage.value = isZh.value ? '進階完成。' : 'Advance complete.'
 }
+function syncLocalPetsFromApi() {
+  localPets.value = pets.map((pet) => ({
+    ...pet,
+    stats: { ...pet.stats },
+    exp: { ...pet.exp },
+  }))
+  selectedPetId.value = localPets.value[0]?.id ?? ''
+}
+
+async function retryPlayerProfile() {
+  try {
+    await loadPlayerProfile()
+  } catch {
+    // Error text is rendered from queryError.player.
+  } finally {
+    syncLocalPetsFromApi()
+  }
+}
+
+async function submitFriendRequest() {
+  const wallet = friendWallet.value.trim()
+
+  if (!wallet) {
+    return
+  }
+
+  try {
+    await requestAddFriend(wallet)
+    friendWallet.value = ''
+  } catch {
+    // Error text is rendered from operationError.addFriend.
+  }
+}
+
+onMounted(() => {
+  void retryPlayerProfile()
+  void loadFriends()
+})
 </script>
 
 <template>
@@ -226,6 +280,20 @@ function confirmBreakthrough() {
       <div class="filter-row">
         <button type="button" @click="cyclePetFilter">{{ filterLabel }}</button>
         <span class="slot-hint">{{ slotHint }}</span>
+      </div>
+
+      <div v-if="isPetProfileLoading || petProfileError || localPets.length === 0" class="pet-api-state" aria-live="polite">
+        <strong v-if="isPetProfileLoading">{{ isZh ? '載入寵物中...' : 'Loading pets...' }}</strong>
+        <template v-else-if="petProfileError">
+          <strong>{{ isZh ? '寵物載入失敗' : 'Pet load failed' }}</strong>
+          <span>{{ petProfileError }}</span>
+          <button type="button" @click="retryPlayerProfile">{{ isZh ? '重試' : 'Retry' }}</button>
+        </template>
+        <template v-else>
+          <strong>{{ text.emptyPet }}</strong>
+          <span>{{ isZh ? '目前沒有後端寵物資料。' : 'No backend pets are available yet.' }}</span>
+          <button type="button" @click="retryPlayerProfile">{{ isZh ? '重新整理' : 'Refresh' }}</button>
+        </template>
       </div>
 
       <div class="pet-grid">
@@ -676,7 +744,98 @@ function confirmBreakthrough() {
 
 .nurture-panel {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+}
+
+.pet-api-state,
+.friends-card {
+  display: grid;
+  gap: 8px;
+  margin: 0 10px 10px;
+  padding: 9px;
+  color: #4b241d;
+  background: #fff3ca;
+  border: 4px solid #6a351f;
+  border-radius: 7px;
+}
+
+.pet-api-state {
+  justify-items: center;
+  text-align: center;
+}
+
+.pet-api-state span,
+.friends-card p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.pet-api-state button,
+.friends-card button {
+  min-height: 30px;
+  padding: 2px 10px;
+  color: #26582b;
+  font-weight: 1000;
+  cursor: pointer;
+  background: linear-gradient(#c8e89e, #7fc165);
+  border: 3px solid #6a351f;
+  border-radius: 7px;
+}
+
+.friends-card header,
+.friend-form,
+.friends-card li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.friends-card header strong {
+  font-size: 16px;
+  font-weight: 1000;
+}
+
+.friend-form input {
+  min-width: 0;
+  flex: 1;
+  min-height: 34px;
+  padding: 4px 8px;
+  color: #4b241d;
+  font: inherit;
+  font-weight: 900;
+  background: #fff;
+  border: 3px solid #7a421f;
+  border-radius: 7px;
+}
+
+.friends-card ul {
+  display: grid;
+  gap: 5px;
+  max-height: 84px;
+  padding: 0;
+  margin: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.friends-card li {
+  min-height: 28px;
+  padding: 4px 7px;
+  background: rgba(255, 255, 255, 0.45);
+  border-radius: 6px;
+}
+
+.friends-card li strong,
+.friends-card li span {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 1000;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .no-selected-pet {

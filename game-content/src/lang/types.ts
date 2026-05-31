@@ -97,6 +97,11 @@ export interface InventoryMessages {
   coins: string
   gridLabel: string
   emptySlot: string
+  loading: string
+  loadFailed: string
+  retry: string
+  notSynced: string
+  syncedAt: string
   details: string
   materialInfo: string
   emptyName: string

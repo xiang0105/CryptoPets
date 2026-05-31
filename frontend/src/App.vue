@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import MarkdownIt from 'markdown-it'
 import { currentMessages, locale, toggleLocale } from './i18n'
+import { useGameApi } from '@/composables/useGameApi'
 import { useWallet } from '@/composables/useWallet'
 import { createStarterPets, replacePets } from '@/data/pets'
 import { setExpeditionTeam } from '@/state/expeditionTeam'
@@ -40,6 +41,7 @@ const isStarterGiftOpen = ref(false)
 const loginNotice = ref('')
 const backgroundMusic = ref<HTMLAudioElement | null>(null)
 const { walletAddress, walletError, shortWalletAddress, connectWallet, restoreSession } = useWallet()
+const { loadAllApiData } = useGameApi()
 const route = useRoute()
 const router = useRouter()
 const slideDirection = ref<'left' | 'right'>('left')
@@ -156,6 +158,7 @@ function confirmLogin() {
 
   isLoginConfirmed.value = true
   grantTestingStarterPets()
+  void loadAllApiData()
   void playBackgroundMusic()
 }
 
@@ -175,6 +178,7 @@ function closeStarterGift() {
 onMounted(async () => {
   await restoreSession()
   void startLoginFlow()
+  void loadAllApiData()
   void playBackgroundMusic()
 })
 

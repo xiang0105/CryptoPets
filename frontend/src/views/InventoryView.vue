@@ -1,28 +1,96 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
-import { currentMessages } from '@/i18n'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { materialDefinitions } from '@cryptopets/game-content'
+import { useGameApi } from '@/composables/useGameApi'
+import { currentMessages, isZh } from '@/i18n'
 
 const text = computed(() => currentMessages.value.inventory)
+const detailCopy = {
+  title: '物品詳情',
+  materialInfo: '素材資訊',
+  emptyName: '空素材格',
+  emptyDescription: '後端已預留鏈上使用者素材資料接口；目前測試階段不可用素材，所以背包維持空格。',
+  stackLimit: '堆疊上限：',
+  value: '價值：',
+  origin: '來源：',
+  syncedAt: '同步時間：',
+  coins: '金幣',
+  chainReserved: '預留給鏈上素材資料',
+  notSynced: '尚未同步',
+  discard: '丟棄',
+  use: '使用',
+  sellAll: '全部出售',
+  selectMaterialFirst: '請先選擇素材。',
+  actionReserved: '此操作已可點擊，後端動作尚未開放。',
+}
 const slotCount = 30
 const shelfPageSize = 16
 const selectedSlot = ref(0)
 const shelfPage = ref(0)
 const shelfDirection = ref<'prev' | 'next'>('next')
 const shelfSwitching = ref(false)
-const emptySlots = computed(() => Array.from({ length: slotCount }, (_, index) => index))
-const shelfTotalPages = computed(() => Math.max(1, Math.ceil(emptySlots.value.length / shelfPageSize)))
+const detailNotice = ref('')
+const { materialBackpack: backpack, queryError, queryLoading, resources, loadMaterialBackpack, loadResources } = useGameApi()
+const materialDefinitionById = new Map(materialDefinitions.map((material) => [material.id, material]))
+const isLoadingBackpack = computed(() => queryLoading.backpack)
+const backpackError = computed(() => queryError.backpack)
+const isLoadingResources = computed(() => queryLoading.resources)
+const resourcesError = computed(() => queryError.resources)
+const coinBalance = computed(() => resources.value?.coins ?? backpack.value?.coins ?? 0)
+
+const materialSlots = computed(() => {
+  const inventory = backpack.value?.inventory ?? []
+  return inventory
+    .filter((item) => item.amount > 0)
+    .map((item) => {
+      const definition = materialDefinitionById.get(item.materialId)
+
+      return {
+        ...item,
+        name: definition?.name ?? { zh: item.materialId, en: item.materialId },
+        element: definition?.element ?? 1,
+        grade: definition?.grade ?? 'D',
+        description: definition?.description ?? item.materialId,
+        price: definition?.basePrice ?? 0,
+      }
+    })
+})
+const shelfTotalPages = computed(() => Math.max(1, Math.ceil(materialSlots.value.length / shelfPageSize)))
 const hasPreviousShelfPage = computed(() => shelfPage.value > 0)
 const hasNextShelfPage = computed(() => shelfPage.value < shelfTotalPages.value - 1)
 const shelfSlots = computed(() => {
   const start = shelfPage.value * shelfPageSize
-  const visibleSlots = emptySlots.value.slice(start, start + shelfPageSize)
+  const visibleSlots = materialSlots.value.slice(start, start + shelfPageSize)
   const emptySlotCount = Math.max(0, shelfPageSize - visibleSlots.length)
 
-  return [...visibleSlots, ...Array.from({ length: emptySlotCount }, (_, index) => start + visibleSlots.length + index)]
+  return [...visibleSlots, ...Array.from({ length: emptySlotCount }, () => null)]
+})
+const selectedMaterial = computed(() => materialSlots.value[selectedSlot.value] ?? null)
+const hasMaterials = computed(() => materialSlots.value.some((slot) => slot !== null))
+const backpackSource = computed(() => {
+  if (!backpack.value) {
+    return detailCopy.chainReserved
+  }
+
+  return backpack.value.chain.enabled ? `Chain ${backpack.value.chain.chainId}` : backpack.value.source
+})
+const syncedAt = computed(() => {
+  if (!backpack.value?.syncedAt) {
+    return detailCopy.notSynced
+  }
+
+  return new Intl.DateTimeFormat(isZh.value ? 'zh-TW' : 'en', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(new Date(backpack.value.syncedAt))
 })
 let shelfSwitchTimer: number | undefined
 
 function selectSlot(index: number) {
+  if (!materialSlots.value[index]) {
+    return
+  }
+
   selectedSlot.value = index
 }
 
@@ -46,6 +114,35 @@ function goShelfPage(direction: -1 | 1) {
   })
 }
 
+async function loadBackpack() {
+  try {
+    await loadMaterialBackpack()
+    selectedSlot.value = materialSlots.value.length > 0 ? 0 : 0
+    shelfPage.value = 0
+  } catch {
+    selectedSlot.value = 0
+    shelfPage.value = 0
+  }
+}
+
+function materialName(material: NonNullable<(typeof materialSlots.value)[number]>) {
+  return isZh.value ? material.name.zh : material.name.en
+}
+
+function handleDetailAction(action: string) {
+  if (!selectedMaterial.value) {
+    detailNotice.value = detailCopy.selectMaterialFirst
+    return
+  }
+
+  detailNotice.value = `${action}：${detailCopy.actionReserved}`
+}
+
+onMounted(() => {
+  void loadBackpack()
+  void loadResources()
+})
+
 onBeforeUnmount(() => {
   window.clearTimeout(shelfSwitchTimer)
 })
@@ -60,6 +157,19 @@ onBeforeUnmount(() => {
         :data-page="shelfPage"
         :aria-label="text.gridLabel"
       >
+        <div v-if="isLoadingBackpack || backpackError || !hasMaterials" class="inventory-state" aria-live="polite">
+          <strong v-if="isLoadingBackpack">{{ text.loading }}</strong>
+          <template v-else-if="backpackError">
+            <strong>{{ text.loadFailed }}</strong>
+            <span>{{ backpackError }}</span>
+            <button type="button" @click="loadBackpack">{{ text.retry }}</button>
+          </template>
+          <template v-else>
+            <strong>{{ text.emptyName }}</strong>
+            <span>{{ text.emptyDescription }}</span>
+          </template>
+        </div>
+
         <button
           v-if="hasPreviousShelfPage"
           class="shelf-nav shelf-nav-prev"
@@ -71,15 +181,22 @@ onBeforeUnmount(() => {
         </button>
 
         <button
-          v-for="slot in shelfSlots"
-          :key="slot"
+          v-for="(material, index) in shelfSlots"
+          :key="material ? material.materialId : `empty-${shelfPage}-${index}`"
           class="material-slot"
-          :class="{ selected: selectedSlot === slot }"
+          :class="{ selected: selectedSlot === shelfPage * shelfPageSize + index, filled: material }"
           type="button"
-          :aria-label="`${text.emptySlot} ${slot + 1}`"
-          @click="selectSlot(slot)"
+          :disabled="!material"
+          :aria-label="material ? materialName(material) : `${text.emptySlot} ${shelfPage * shelfPageSize + index + 1}`"
+          @click="selectSlot(shelfPage * shelfPageSize + index)"
         >
-          <span class="slot-placeholder" aria-hidden="true"></span>
+          <template v-if="material">
+            <span class="grade-corner" :class="`grade-${material.grade.toLowerCase()}`">{{ material.grade }}</span>
+            <span class="material-icon" :class="`material-${material.element}`" aria-hidden="true"></span>
+            <strong>{{ materialName(material) }}</strong>
+            <small>x{{ material.amount }}</small>
+          </template>
+          <span v-else class="slot-placeholder" aria-hidden="true"></span>
         </button>
 
         <button
@@ -97,37 +214,43 @@ onBeforeUnmount(() => {
 
       <aside class="inventory-detail" aria-labelledby="inventory-detail-title">
         <header>
-          <h2 id="inventory-detail-title">{{ text.details }}</h2>
+          <h2 id="inventory-detail-title">{{ detailCopy.title }}</h2>
         </header>
 
         <section class="detail-body">
-          <h3>{{ text.materialInfo }}</h3>
-          <div class="detail-empty-slot" aria-hidden="true">
-            <span></span>
+          <h3>{{ detailCopy.materialInfo }}</h3>
+          <div class="detail-empty-slot" :class="{ filled: selectedMaterial }" aria-hidden="true">
+            <span v-if="selectedMaterial" class="material-icon large" :class="`material-${selectedMaterial.element}`"></span>
+            <span v-else></span>
           </div>
-          <strong>{{ text.emptyName }}</strong>
-          <p>{{ text.emptyDescription }}</p>
+          <strong>{{ selectedMaterial ? materialName(selectedMaterial) : detailCopy.emptyName }}</strong>
+          <p>{{ selectedMaterial?.description ?? detailCopy.emptyDescription }}</p>
 
           <dl>
             <div>
-              <dt>{{ text.stackLimit }}</dt>
-              <dd>0 / 99</dd>
+              <dt>{{ detailCopy.stackLimit }}</dt>
+              <dd>{{ selectedMaterial?.amount ?? 0 }} / 99</dd>
             </div>
             <div>
-              <dt>{{ text.value }}</dt>
-              <dd>0 {{ text.coins }}</dd>
+              <dt>{{ detailCopy.value }}</dt>
+              <dd>{{ selectedMaterial ? selectedMaterial.price * selectedMaterial.amount : 0 }} {{ detailCopy.coins }}</dd>
             </div>
             <div>
-              <dt>{{ text.origin }}</dt>
-              <dd>{{ text.chainReserved }}</dd>
+              <dt>{{ detailCopy.origin }}</dt>
+              <dd>{{ backpackSource }}</dd>
+            </div>
+            <div>
+              <dt>{{ detailCopy.syncedAt }}</dt>
+              <dd>{{ syncedAt }}</dd>
             </div>
           </dl>
+          <p v-if="detailNotice" class="detail-notice">{{ detailNotice }}</p>
         </section>
 
         <footer>
-          <button type="button" disabled>{{ text.discard }}</button>
-          <button type="button" disabled>{{ text.use }}</button>
-          <button type="button" disabled>{{ text.sellAll }}</button>
+          <button type="button" @click="handleDetailAction(detailCopy.discard)">{{ detailCopy.discard }}</button>
+          <button type="button" @click="handleDetailAction(detailCopy.use)">{{ detailCopy.use }}</button>
+          <button type="button" @click="handleDetailAction(detailCopy.sellAll)">{{ detailCopy.sellAll }}</button>
         </footer>
       </aside>
     </div>
@@ -285,6 +408,39 @@ onBeforeUnmount(() => {
     0 3px 0 rgba(55, 33, 23, 0.22);
 }
 
+.material-slot:disabled {
+  cursor: default;
+}
+
+.material-slot.filled {
+  grid-template-rows: 1fr auto auto;
+  gap: 4px;
+  background: linear-gradient(#fff1c8, #ffd889);
+}
+
+.material-slot strong,
+.material-slot small {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  color: #4d2d1d;
+  font-weight: 1000;
+  line-height: 1.05;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.material-slot strong {
+  font-size: 15px;
+}
+
+.material-slot small {
+  color: #fff7df;
+  font-size: 13px;
+  text-shadow: 1px 1px 0 #4d2d1d;
+}
+
 .inventory-shelf.is-switching .material-slot {
   animation: shelf-card-next 320ms ease both;
 }
@@ -307,6 +463,49 @@ onBeforeUnmount(() => {
     linear-gradient(135deg, rgba(255, 255, 255, 0.1), transparent 44%),
     rgba(111, 83, 58, 0.72);
   border: 3px dashed rgba(255, 239, 192, 0.75);
+  border-radius: 8px;
+}
+
+.inventory-state {
+  position: absolute;
+  inset: 20px 32px 12px;
+  z-index: 2;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 9px;
+  padding: 18px;
+  color: #fff7df;
+  text-align: center;
+  pointer-events: none;
+  background: rgba(85, 48, 26, 0.82);
+  border: 4px solid rgba(255, 239, 192, 0.7);
+  border-radius: 8px;
+}
+
+.inventory-state strong {
+  font-size: 22px;
+  font-weight: 1000;
+}
+
+.inventory-state span {
+  max-width: 430px;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.inventory-state button {
+  min-width: 104px;
+  min-height: 36px;
+  color: #6a321c;
+  font-size: 15px;
+  font-weight: 1000;
+  cursor: pointer;
+  pointer-events: auto;
+  background: linear-gradient(#ffe794, #f7b746);
+  border: 3px solid #b8702b;
   border-radius: 8px;
 }
 
@@ -379,7 +578,8 @@ onBeforeUnmount(() => {
     'title title'
     'icon name'
     'icon copy'
-    'meta meta';
+    'meta meta'
+    'notice notice';
   align-content: start;
   gap: 9px 12px;
   min-height: 0;
@@ -427,6 +627,79 @@ onBeforeUnmount(() => {
   border-radius: 8px;
 }
 
+.detail-empty-slot.filled {
+  background: #fff1c8;
+}
+
+.grade-corner {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  display: grid;
+  width: 31px;
+  height: 31px;
+  padding: 5px 0 0 10px;
+  color: #fff7df;
+  font-size: 10px;
+  font-weight: 1000;
+  line-height: 1;
+  background: #8a4a25;
+  border: 2px solid #6e3d23;
+  border-radius: 0 6px 0 18px;
+  place-items: start end;
+}
+
+.grade-a {
+  background: #c75f4c;
+}
+
+.grade-b {
+  background: #2f7180;
+}
+
+.grade-c {
+  background: #6f8b41;
+}
+
+.grade-d {
+  background: #7b5b3a;
+}
+
+.material-icon {
+  display: block;
+  justify-self: center;
+  width: min(54px, 58%);
+  aspect-ratio: 1;
+  background: #e7a23f;
+  border: 3px solid rgba(255, 247, 223, 0.78);
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.24);
+}
+
+.material-icon.large {
+  width: 66px;
+  height: 66px;
+}
+
+.material-1 {
+  background: linear-gradient(135deg, #f7c75b, #e78433);
+  border-radius: 50% 46% 52% 48%;
+}
+
+.material-2 {
+  background: linear-gradient(135deg, #9dd36a, #3f9850);
+  border-radius: 12px 26px 12px 26px;
+}
+
+.material-3 {
+  background: linear-gradient(135deg, #b7e4ef, #559fb8);
+}
+
+.material-4 {
+  background: linear-gradient(135deg, #efb3d8, #b86aa2);
+  border-radius: 50%;
+}
+
 .detail-body strong {
   grid-area: name;
   align-self: end;
@@ -455,6 +728,18 @@ onBeforeUnmount(() => {
   padding-top: 4px;
   text-align: left;
   border-top: 0;
+}
+
+.detail-notice {
+  grid-area: notice;
+  min-height: 30px;
+  padding: 6px 8px;
+  color: #26582b;
+  font-size: 13px;
+  font-weight: 1000;
+  text-align: center;
+  background: rgba(200, 232, 158, 0.62);
+  border-radius: 6px;
 }
 
 .detail-body dl div {
@@ -501,11 +786,16 @@ onBeforeUnmount(() => {
   color: #6a321c;
   font-size: 15px;
   font-weight: 1000;
-  cursor: not-allowed;
+  cursor: pointer;
   background: linear-gradient(#ffe794, #f7b746);
   border: 3px solid #b8702b;
   border-radius: 8px;
-  opacity: 0.68;
+  opacity: 1;
+}
+
+.inventory-detail footer button:hover {
+  filter: brightness(1.04);
+  transform: translateY(-1px);
 }
 
 .inventory-detail footer button:first-child {
@@ -614,9 +904,21 @@ onBeforeUnmount(() => {
     border-width: 3px;
   }
 
+  .material-slot strong {
+    font-size: 10px;
+  }
+
+  .material-slot small {
+    font-size: 10px;
+  }
+
   .slot-placeholder {
     width: min(50px, 64%);
     border-width: 2px;
+  }
+
+  .inventory-state {
+    inset: 16px 18px 42px;
   }
 
   .inventory-detail {
