@@ -4,6 +4,8 @@ import type {
   MaterialBackpack,
   PlayerResources,
   PlayerTransaction,
+  ListingIdRequest,
+  ListMarketMaterialRequest,
   WalletAddress,
 } from '@cryptopets/shared'
 import { isKnownMaterialId } from '@cryptopets/game-content'
@@ -12,13 +14,13 @@ import { supabase } from '../config/supabase.js'
 import { HttpError } from '../utils/httpError.js'
 import { materialBalanceProvider } from './materialBalanceProvider.js'
 
-const listMaterialSchema = z.object({
+const listMaterialSchema: z.ZodType<ListMarketMaterialRequest> = z.object({
   materialId: z.string().min(1).max(64).refine(isKnownMaterialId, 'UNKNOWN_MATERIAL_ID'),
   amount: z.number().int().positive().max(999),
   price: z.number().int().positive().max(1_000_000),
 })
 
-const listingIdSchema = z.object({
+const listingIdSchema: z.ZodType<ListingIdRequest> = z.object({
   listingId: z.string().uuid(),
 })
 
@@ -46,15 +48,22 @@ export async function getMaterialBackpack(userId: string): Promise<MaterialBackp
     source: env.MATERIAL_BACKPACK_SOURCE,
     syncedAt: new Date().toISOString(),
     chain: {
-      enabled: env.MATERIAL_BACKPACK_SOURCE === 'chain-db',
+      enabled:
+        env.MATERIAL_BACKPACK_SOURCE === 'chain-db' && Boolean(env.RPC_URL) && isConfiguredContract(env.MATERIAL_CONTRACT_ADDRESS),
       chainId: env.CHAIN_ID,
-      materialContractAddress: toWalletAddress(env.MATERIAL_CONTRACT_ADDRESS),
+      materialContractAddress: isConfiguredContract(env.MATERIAL_CONTRACT_ADDRESS)
+        ? toWalletAddress(env.MATERIAL_CONTRACT_ADDRESS)
+        : null,
     },
   }
 }
 
 function toWalletAddress(address: string | undefined): WalletAddress | null {
   return address ? (address as WalletAddress) : null
+}
+
+function isConfiguredContract(address: string | undefined) {
+  return Boolean(address && !/^0x0{40}$/i.test(address))
 }
 
 export async function getMarketListings(): Promise<MarketListing[]> {

@@ -411,10 +411,10 @@ export const expeditionForests: ExpeditionForest[] = [
 export const gameStoryChapters: GameStoryChapter[] = [
   {
     id: 'starter-gift',
-    title: { zh: '測試起始隊伍', en: 'Testing Starter Team' },
+    title: { zh: '後端起始隊伍', en: 'Backend Starter Team' },
     description: {
-      zh: '測試模式會發放 sakiko、MAX、SONORATO、CANESAN 四隻水豚。技能與數值目前用於前端顯示與劇本判定，不執行實際戰鬥或扣血。',
-      en: 'Testing mode grants sakiko, MAX, SONORATO, and CANESAN. Skills and stats are currently used for frontend display and script checks, not real combat or HP mutation.',
+      zh: '後端目前會建立 sakiko、MAX、SONORATO、CANESAN 四隻可用水豚。技能與數值用於顯示與劇本判定；鏈上持有權未啟用時由後端回報狀態。',
+      en: 'The backend currently creates sakiko, MAX, SONORATO, and CANESAN as available capybaras. Skills and stats are used for display and script checks; chain ownership status is reported by the backend when unavailable.',
     },
     beats: [
       {
@@ -423,7 +423,7 @@ export const gameStoryChapters: GameStoryChapter[] = [
         outcomes: [
           {
             id: 'gift-wallet-login-success',
-            text: { zh: '玩家取得錢包地址並進入測試流程。', en: 'The player receives a wallet address and enters the testing flow.' },
+            text: { zh: '玩家完成錢包簽名，前端載入後端玩家資料。', en: 'The player signs with the wallet and the frontend loads backend player data.' },
           },
         ],
       },

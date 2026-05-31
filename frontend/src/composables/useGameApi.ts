@@ -1,6 +1,7 @@
 import { computed, reactive, ref } from 'vue'
 import type {
   ExpeditionSummary,
+  ExpeditionType,
   FriendSummary,
   MaterialBackpack,
   MarketListing,
@@ -32,7 +33,6 @@ type QueryKey = 'player' | 'resources' | 'backpack' | 'friends' | 'marketListing
 type OperationKey = 'startExpedition' | 'claimReward' | 'addFriend' | 'listMarketMaterial' | 'cancelListing' | 'buyListing'
 
 const materialDefinitionById = new Map(materialDefinitions.map((material) => [material.id, material]))
-const FRONTEND_ONLY_AUTH = import.meta.env.VITE_FRONTEND_ONLY_AUTH !== 'false'
 
 const playerProfile = ref<PlayerProfile | null>(null)
 const resources = ref<PlayerResources | null>(null)
@@ -206,12 +206,14 @@ function shouldUseProtectedApi() {
   return Boolean(getAuthToken())
 }
 
-async function loadPlayerProfile() {
+function requireProtectedApi() {
   if (!shouldUseProtectedApi()) {
-    queryError.player = ''
-    activeExpedition.value = null
-    return playerProfile.value
+    throw new Error('AUTH_REQUIRED')
   }
+}
+
+async function loadPlayerProfile() {
+  requireProtectedApi()
 
   return runQuery(
     'player',
@@ -226,11 +228,7 @@ async function loadPlayerProfile() {
 }
 
 async function loadResources() {
-  if (!shouldUseProtectedApi()) {
-    queryError.resources = ''
-    resources.value = resources.value ?? { coins: 0, inventory: [] }
-    return resources.value
-  }
+  requireProtectedApi()
 
   return runQuery('resources', getResources, (nextResources) => {
     resources.value = nextResources
@@ -238,21 +236,7 @@ async function loadResources() {
 }
 
 async function loadMaterialBackpack() {
-  if (!shouldUseProtectedApi()) {
-    queryError.backpack = ''
-    materialBackpack.value = materialBackpack.value ?? {
-      coins: resources.value?.coins ?? 0,
-      inventory: resources.value?.inventory ?? [],
-      source: 'local-db',
-      syncedAt: new Date().toISOString(),
-      chain: {
-        enabled: false,
-        chainId: Number(import.meta.env.VITE_CHAIN_ID ?? 1),
-        materialContractAddress: null,
-      },
-    }
-    return materialBackpack.value
-  }
+  requireProtectedApi()
 
   return runQuery('backpack', getMaterialBackpack, (nextBackpack) => {
     materialBackpack.value = nextBackpack
@@ -264,11 +248,7 @@ async function loadMaterialBackpack() {
 }
 
 async function loadFriends() {
-  if (!shouldUseProtectedApi()) {
-    queryError.friends = ''
-    friends.value = []
-    return friends.value
-  }
+  requireProtectedApi()
 
   return runQuery('friends', getFriends, (nextFriends) => {
     friends.value = nextFriends
@@ -276,11 +256,7 @@ async function loadFriends() {
 }
 
 async function loadMarketListings() {
-  if (!shouldUseProtectedApi()) {
-    queryError.marketListings = ''
-    marketListings.value = []
-    return marketListings.value
-  }
+  requireProtectedApi()
 
   return runQuery('marketListings', getMarketListings, (nextListings) => {
     marketListings.value = nextListings
@@ -288,11 +264,7 @@ async function loadMarketListings() {
 }
 
 async function loadTransactions() {
-  if (!shouldUseProtectedApi()) {
-    queryError.transactions = ''
-    transactions.value = []
-    return transactions.value
-  }
+  requireProtectedApi()
 
   return runQuery('transactions', getTransactions, (nextTransactions) => {
     transactions.value = nextTransactions
@@ -310,24 +282,7 @@ async function loadAllApiData() {
   ])
 }
 
-async function startTeamExpedition(petIds: string[], expeditionType: string) {
-  if (!shouldUseProtectedApi() && FRONTEND_ONLY_AUTH) {
-    const now = new Date()
-    const summary: ExpeditionSummary = {
-      id: `local-${now.getTime()}`,
-      petIds,
-      expeditionType: expeditionType as ExpeditionSummary['expeditionType'],
-      startedAt: now.toISOString(),
-      endsAt: new Date(now.getTime() + 60 * 60 * 1000).toISOString(),
-      status: 'started',
-      reward: null,
-    }
-
-    operationError.startExpedition = ''
-    activeExpedition.value = summary
-    return summary
-  }
-
+async function startTeamExpedition(petIds: string[], expeditionType: ExpeditionType) {
   if (!shouldUseProtectedApi()) {
     operationError.startExpedition = 'AUTH_REQUIRED'
     throw new Error('AUTH_REQUIRED')
@@ -340,30 +295,11 @@ async function startTeamExpedition(petIds: string[], expeditionType: string) {
   )
 
   activeExpedition.value = summary
+  await loadPlayerProfile().catch(() => undefined)
   return summary
 }
 
 async function claimActiveExpedition(expeditionId: string) {
-  if (!shouldUseProtectedApi() && FRONTEND_ONLY_AUTH) {
-    const summary: ExpeditionSummary = {
-      id: expeditionId,
-      petIds: activeExpedition.value?.petIds ?? [],
-      expeditionType: activeExpedition.value?.expeditionType ?? 'orange',
-      startedAt: activeExpedition.value?.startedAt ?? new Date().toISOString(),
-      endsAt: activeExpedition.value?.endsAt ?? new Date().toISOString(),
-      status: 'claimed',
-      reward: {
-        exp: 120,
-        coins: 60,
-        materials: [],
-      },
-    }
-
-    operationError.claimReward = ''
-    activeExpedition.value = null
-    return summary
-  }
-
   if (!shouldUseProtectedApi()) {
     operationError.claimReward = 'AUTH_REQUIRED'
     throw new Error('AUTH_REQUIRED')

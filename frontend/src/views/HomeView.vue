@@ -1,14 +1,15 @@
 ﻿<script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import type { ExpeditionSummary } from '@cryptopets/shared'
 import { pets, type Pet } from '@/data/pets'
 import { useGameApi } from '@/composables/useGameApi'
 import { expeditionTeamPets } from '@/state/expeditionTeam'
-import { grantSkillPoints } from '@/state/testProgress'
 import { getPetImage, yuzuBiteFrames } from '@/content/gameAssets'
 import orangeMap from '@game-content/assets/maps/orange.png'
 import { currentMessages, isZh } from '@/i18n'
 import {
   expeditionForests,
+  materialDefinitions,
   petElementMeta,
   type ExpeditionForest,
   type StoryBeat,
@@ -17,6 +18,7 @@ import {
 } from '@cryptopets/game-content'
 
 const elementMeta = petElementMeta
+const materialDefinitionById = new Map(materialDefinitions.map((material) => [material.id, material]))
 
 const text = computed(() => ({
   ...currentMessages.value.home,
@@ -50,8 +52,6 @@ interface ExpeditionRecord {
   logs: ExpeditionLogEntry[]
 }
 
-const expeditionStorageKey = 'crypto-pets-local-expedition'
-const expeditionHistoryStorageKey = 'crypto-pets-local-expedition-history'
 const forestOptions: ForestOption[] = expeditionForests
 
 const fruitFrameIndex = ref(0)
@@ -83,12 +83,20 @@ const expeditionProgress = computed(() => {
 
   return Math.min(100, Math.max(0, Math.round((elapsed / total) * 100)))
 })
+const nextExpeditionLog = computed(() => {
+  if (!activeExpedition.value) {
+    return null
+  }
+
+  return activeExpedition.value.logs.find((log) => log.at > now.value) ?? null
+})
 const remainingTime = computed(() => {
   if (!activeExpedition.value) {
     return text.value.ready
   }
 
-  const seconds = Math.max(0, Math.ceil((activeExpedition.value.finishAt - now.value) / 1000))
+  const nextAt = nextExpeditionLog.value?.at ?? activeExpedition.value.finishAt
+  const seconds = Math.max(0, Math.ceil((nextAt - now.value) / 1000))
   const minutes = Math.floor(seconds / 60)
   const restSeconds = seconds % 60
 
@@ -153,12 +161,10 @@ function displayForestSummary(forest: ForestOption) {
 }
 
 function loadStoredExpedition(): ExpeditionRecord | null {
-  window.localStorage.removeItem(expeditionStorageKey)
   return null
 }
 
 function loadStoredExpeditionHistory() {
-  window.localStorage.removeItem(expeditionHistoryStorageKey)
   return []
 }
 
@@ -182,22 +188,6 @@ function formatLogTime(timestamp: number) {
 
 function petLevel(pet: Pet) {
   return pet.level
-}
-
-function incrementExpeditionTeamLevels() {
-  const teamIds = new Set(expeditionTeamPets.value.map((pet) => pet.id))
-  let levelUps = 0
-
-  pets.forEach((pet) => {
-    if (teamIds.has(pet.id)) {
-      pet.level += 1
-      levelUps += 1
-      pet.exp.current = pet.level
-      pet.exp.next = Math.max(pet.exp.next, pet.level + 1)
-    }
-  })
-
-  grantSkillPoints(levelUps)
 }
 
 function abilityNote(forest: ForestOption) {
@@ -288,9 +278,10 @@ function storyBeatMessage(event: StoryBeat) {
   return result ? `${setup} ${result}` : setup
 }
 
-function buildExpeditionLogs(forest: ForestOption, startedAt: number): ExpeditionLogEntry[] {
+function buildExpeditionLogs(forest: ForestOption, startedAt: number, finishAt = startedAt + forest.durationSeconds * 1000): ExpeditionLogEntry[] {
   const teamNames = expeditionTeamPets.value.map((pet) => pet.name).join('、') || 'Capybara Team'
-  const eventGap = forest.durationSeconds / (forest.scriptEvents.length + 1)
+  const durationSeconds = Math.max(1, (finishAt - startedAt) / 1000)
+  const eventGap = durationSeconds / (forest.scriptEvents.length + 1)
   const firstEntry = {
     at: startedAt,
     message: isZh.value
@@ -302,13 +293,63 @@ function buildExpeditionLogs(forest: ForestOption, startedAt: number): Expeditio
     message: storyBeatMessage(event),
   }))
   const finishEntry = {
-    at: startedAt + forest.durationSeconds * 1000,
+    at: finishAt,
     message: isZh.value
       ? `${forest.name.zh}劇本完成，遠征隊帶回 ${forest.reward}。`
       : `${forest.name.en} script completed. The party returned with ${forest.reward}.`,
   }
 
   return [firstEntry, ...scriptEntries, finishEntry]
+}
+
+function rewardMaterialLabel(materialId: string) {
+  const material = materialDefinitionById.get(materialId)
+
+  return material ? (isZh.value ? material.name.zh : material.name.en) : materialId
+}
+
+function buildRewardLog(summary: ExpeditionSummary): ExpeditionLogEntry | null {
+  if (!summary.reward) {
+    return null
+  }
+
+  const materials = summary.reward.materials.map((material) => `${rewardMaterialLabel(material.id)} x${material.count}`)
+  const rewards = [
+    `${summary.reward.coins} ${isZh.value ? '金幣' : 'coins'}`,
+    `${summary.reward.exp} EXP`,
+    ...materials,
+  ]
+
+  return {
+    at: Date.now(),
+    message: isZh.value
+      ? `後端已確認遠征獎勵：${rewards.join('、')}。`
+      : `Backend reward confirmed: ${rewards.join(', ')}.`,
+    variant: 'notice',
+  }
+}
+
+function expeditionRecordFromSummary(summary: ExpeditionSummary): ExpeditionRecord | null {
+  const forest = forestOptions.find((entry) => entry.id === summary.expeditionType)
+
+  if (!forest) {
+    return null
+  }
+
+  const startedAt = new Date(summary.startedAt).getTime()
+  const finishAt = new Date(summary.endsAt).getTime()
+
+  if (!Number.isFinite(startedAt) || !Number.isFinite(finishAt)) {
+    return null
+  }
+
+  return {
+    id: forest.id,
+    apiId: summary.id,
+    startedAt,
+    finishAt,
+    logs: buildExpeditionLogs(forest, startedAt, finishAt),
+  }
 }
 
 const expeditionStatusError = computed(() => queryError.player || operationError.startExpedition || operationError.claimReward)
@@ -329,17 +370,13 @@ async function startExpedition(forest: ForestOption) {
     return
   }
 
-  const startedAt = Date.now()
-  const record: ExpeditionRecord = {
-    id: forest.id,
-    apiId: apiSummary.id,
-    startedAt,
-    finishAt: startedAt + forest.durationSeconds * 1000,
-    logs: buildExpeditionLogs(forest, startedAt),
-  }
+  const record = expeditionRecordFromSummary(apiSummary)
 
-  activeExpedition.value = record
-  saveStoredExpedition(record)
+  if (record) {
+    activeExpedition.value = record
+    saveStoredExpedition(record)
+    now.value = Date.now()
+  }
 }
 
 async function retryStartExpedition() {
@@ -359,26 +396,17 @@ async function syncActiveExpeditionFromApi() {
 
   const summary = apiActiveExpedition.value
 
-  if (!summary || activeExpedition.value) {
+  if (!summary) {
     return
   }
 
-  const forest = forestOptions.find((entry) => entry.id === summary.expeditionType)
+  const record = expeditionRecordFromSummary(summary)
 
-  if (!forest) {
+  if (!record) {
     return
   }
 
-  const startedAt = new Date(summary.startedAt).getTime()
-  const finishAt = new Date(summary.endsAt).getTime()
-
-  activeExpedition.value = {
-    id: forest.id,
-    apiId: summary.id,
-    startedAt,
-    finishAt,
-    logs: buildExpeditionLogs(forest, startedAt),
-  }
+  activeExpedition.value = record
   saveStoredExpedition(activeExpedition.value)
   now.value = Date.now()
 }
@@ -388,19 +416,23 @@ async function completeExpedition() {
     return
   }
 
+  let rewardLog: ExpeditionLogEntry | null = null
+
   if (activeExpedition.value.apiId) {
     try {
-      await claimActiveExpedition(activeExpedition.value.apiId)
+      const summary = await claimActiveExpedition(activeExpedition.value.apiId)
+      rewardLog = buildRewardLog(summary)
     } catch {
       return
     }
   }
 
-  expeditionHistory.value = [...activeExpedition.value.logs, ...expeditionHistory.value]
+  const completedLogs = rewardLog ? [...activeExpedition.value.logs, rewardLog] : activeExpedition.value.logs
+
+  expeditionHistory.value = [...completedLogs, ...expeditionHistory.value]
     .sort((logA, logB) => logB.at - logA.at)
     .slice(0, 24)
     .sort((logA, logB) => logA.at - logB.at)
-  incrementExpeditionTeamLevels()
   saveStoredExpeditionHistory(expeditionHistory.value)
   activeExpedition.value = null
   saveStoredExpedition(null)

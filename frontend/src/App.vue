@@ -5,9 +5,8 @@ import MarkdownIt from 'markdown-it'
 import { currentMessages, locale, toggleLocale } from './i18n'
 import { useGameApi } from '@/composables/useGameApi'
 import { useWallet } from '@/composables/useWallet'
-import { createStarterPets, pets, replacePets } from '@/data/pets'
+import { pets } from '@/data/pets'
 import { setExpeditionTeam } from '@/state/expeditionTeam'
-import { resetTestProgress } from '@/state/testProgress'
 import { capybaraImageBySlug } from '@/content/gameAssets'
 import { starterCapybaras } from '@cryptopets/game-content'
 import logoUrl from '@game-content/assets/branding/logo.png'
@@ -52,8 +51,6 @@ const markdown = new MarkdownIt({
   linkify: true,
   typographer: true,
 })
-const frontendOnlyAuth = import.meta.env.VITE_FRONTEND_ONLY_AUTH !== 'false'
-
 const renderedReadme = computed(() => markdown.render(currentMessages.value.app.help.markdown))
 
 const musicButtonIcon = computed(() => (isMusicPlaying.value ? 'music' : 'volume-xmark'))
@@ -158,26 +155,11 @@ async function confirmLogin() {
   }
 
   isLoginConfirmed.value = true
-  resetTestProgress()
-
-  if (frontendOnlyAuth) {
-    grantTestingStarterPets()
-  } else {
-    await loadAllApiData()
-    setExpeditionTeam(pets.map((pet) => pet.id))
-    isStarterGiftOpen.value = pets.length > 0
-  }
+  await loadAllApiData()
+  setExpeditionTeam(pets.map((pet) => pet.id))
+  isStarterGiftOpen.value = pets.length > 0
 
   void playBackgroundMusic()
-}
-
-function grantTestingStarterPets() {
-  const starterPets = createStarterPets(walletAddress.value)
-
-  resetTestProgress()
-  replacePets(starterPets)
-  setExpeditionTeam(starterPets.map((pet) => pet.id))
-  isStarterGiftOpen.value = true
 }
 
 function closeStarterGift() {

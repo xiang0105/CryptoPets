@@ -1,17 +1,17 @@
 import crypto from 'node:crypto'
 import { z } from 'zod'
-import type { ExpeditionReward, ExpeditionSummary } from '@cryptopets/shared'
+import type { ClaimRewardRequest, ExpeditionReward, ExpeditionSummary, StartExpeditionRequest } from '@cryptopets/shared'
 import { expeditionForests, materialIds, type ForestId } from '@cryptopets/game-content'
 import { supabase } from '../config/supabase.js'
 import { HttpError } from '../utils/httpError.js'
 import { materialBalanceProvider } from './materialBalanceProvider.js'
 
-const startExpeditionSchema = z.object({
+const startExpeditionSchema: z.ZodType<StartExpeditionRequest> = z.object({
   petIds: z.array(z.string().uuid()).min(1).max(4),
   expeditionType: z.enum(expeditionForests.map((forest) => forest.id) as ['orange', 'apple', 'snow-peach']).default('orange'),
 })
 
-const claimRewardSchema = z.object({
+const claimRewardSchema: z.ZodType<ClaimRewardRequest> = z.object({
   expeditionId: z.string().uuid(),
 })
 

@@ -4,7 +4,6 @@ import { goodies } from '@/data/goodies'
 import { pets, type Pet } from '@/data/pets'
 import { useGameApi } from '@/composables/useGameApi'
 import { expeditionTeamIds, isPetInExpeditionTeam, maxTeamSlots, setExpeditionTeamSlot } from '@/state/expeditionTeam'
-import { availableSkillPoints, spendSkillPoint } from '@/state/testProgress'
 import { currentMessages, isZh } from '@/i18n'
 import { getPetImage } from '@/content/gameAssets'
 import { petElementMeta, statusRules } from '@cryptopets/game-content'
@@ -16,8 +15,9 @@ const activeTeamSlotIndex = ref<number | null>(null)
 const petFilterMode = ref<'all' | 'team' | 'available' | 'level'>('all')
 const skillLevels = ref([1, 1, 1])
 const nurtureMessage = ref('')
+const availableSkillPoints = computed(() => 0)
 
-const { operationError, queryError, queryLoading, loadFriends, loadPlayerProfile } = useGameApi()
+const { operationError, playerProfile, queryError, queryLoading, loadFriends, loadPlayerProfile } = useGameApi()
 
 const breakthroughMaterials = [
   { id: 'MAT-2C', count: 3 },
@@ -127,6 +127,15 @@ const filterLabel = computed(() => {
 
 const isPetProfileLoading = computed(() => queryLoading.player)
 const petProfileError = computed(() => queryError.player)
+const chainStatusNotice = computed(() => {
+  if (!playerProfile.value || playerProfile.value.chain.enabled) {
+    return ''
+  }
+
+  return isZh.value
+    ? '後端回報鏈上寵物持有權尚未啟用，目前顯示後端可用角色資料。'
+    : 'Backend reports on-chain pet ownership is not enabled yet; showing backend-available pet data.'
+})
 
 function displayElement(element: Pet['element']) {
   return isZh.value ? petElementMeta[element].label.zh : petElementMeta[element].label.en
@@ -166,33 +175,16 @@ function cyclePetFilter() {
 }
 
 function addSkillPoint(skillIndex: number) {
-  const currentLevel = skillLevels.value[skillIndex] ?? 0
-
-  if (availableSkillPoints.value <= 0 || currentLevel >= 5 || !spendSkillPoint()) {
-    nurtureMessage.value = isZh.value ? '沒有可用技能點。' : 'No skill points available.'
-    return
-  }
-
-  skillLevels.value = skillLevels.value.map((level, index) => (index === skillIndex ? level + 1 : level))
-  nurtureMessage.value = isZh.value ? '技能顯示等級已提升。' : 'Skill display level upgraded.'
+  void skillIndex
+  nurtureMessage.value = isZh.value
+    ? '技能升級尚未開放後端接口，前端不會本地修改資料。'
+    : 'Skill upgrades are waiting for a backend API; frontend data was not changed.'
 }
 
 function confirmBreakthrough() {
-  const pet = selectedPet.value
-
-  if (!pet || !canStageBreakthrough.value) {
-    nurtureMessage.value = isZh.value ? '尚未滿足突破條件。' : 'Advance requirements are not met.'
-    return
-  }
-
-  pet.stage += 1
-  pet.exp.current = 0
-  pet.exp.next += 300
-  pet.stats.maxHp += 12
-  pet.stats.hp = pet.stats.maxHp
-  pet.stats.atk += 6
-  pet.stats.def += 5
-  nurtureMessage.value = isZh.value ? '突破完成。' : 'Advance complete.'
+  nurtureMessage.value = isZh.value
+    ? '突破尚未開放後端接口，前端不會本地修改資料。'
+    : 'Advancement is waiting for a backend API; frontend data was not changed.'
 }
 
 function syncLocalPetsFromApi() {
@@ -274,6 +266,9 @@ onMounted(() => {
           <button type="button" @click="retryPlayerProfile">{{ isZh ? '重新整理' : 'Refresh' }}</button>
         </template>
       </div>
+      <p v-if="chainStatusNotice" class="pet-api-state pet-chain-state" aria-live="polite">
+        <span>{{ chainStatusNotice }}</span>
+      </p>
 
       <div class="pet-grid">
         <button

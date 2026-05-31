@@ -49,15 +49,12 @@ const {
 const shelfPage = ref(0)
 const shelfDirection = ref<'prev' | 'next'>('next')
 const shelfSwitching = ref(false)
-const removedListingIds = ref<string[]>([])
 const pendingRemoval = ref<GoodieSft | null>(null)
 const isInventoryModalOpen = ref(false)
 const selectedInventoryId = ref('')
 const listingPrice = ref(100)
 const listingAmount = ref(1)
-const purchasedListingIds = ref<string[]>([])
 const storeNotice = ref('')
-const transactionHistory = ref<Array<{ actionKey: 'bought' | 'sold' | 'listed'; name: string; amount: number }>>([])
 let shelfSwitchTimer: number | undefined
 const shelfPageSize = 16
 const marketCapybaras = marketCapybaraSprites
@@ -74,9 +71,11 @@ const shelfSlots = computed<(GoodieSft | null)[]>(() => {
   return [...visibleGoodies, ...Array.from({ length: emptySlotCount }, (): null => null)]
 })
 const overviewListingSlots = computed(() => {
-  const listings = ownedMarketGoodies.value
-    .filter((goodie) => !removedListingIds.value.includes(goodie.id))
-    .slice(0, 40)
+  const listings = ownedMarketGoodies.value.slice(0, 40)
+
+  if (listings.length === 0) {
+    return []
+  }
 
   return [...listings, ...Array.from({ length: Math.max(0, 40 - listings.length) }, () => null)]
 })
@@ -95,12 +94,7 @@ const selectedInventoryGoodie = computed(() =>
 )
 const maxListingAmount = computed(() => Math.max(1, selectedInventoryGoodie.value?.amount ?? 1))
 const transactions = computed(() => {
-  const actionLabels = {
-    bought: text.value.bought,
-    sold: text.value.sold,
-    listed: text.value.listed,
-  }
-  const apiHistory = apiTransactions.value.map((item) => {
+  return apiTransactions.value.map((item) => {
     const definition = item.materialId ? materialDefinitionById.get(item.materialId) : null
 
     return {
@@ -108,14 +102,7 @@ const transactions = computed(() => {
       name: definition ? (isZh.value ? definition.name.zh : definition.name.en) : (item.materialId ?? text.value.coins),
       amount: item.coinAmount,
     }
-  })
-  const liveTransactions = transactionHistory.value.map((item) => ({
-    action: actionLabels[item.actionKey],
-    name: item.name,
-    amount: item.amount,
-  }))
-
-  return [...liveTransactions, ...apiHistory].slice(0, 8)
+  }).slice(0, 8)
 })
 const isMarketLoading = computed(() => queryLoading.marketListings)
 const marketError = computed(() => queryError.marketListings || queryError.player || operationError.buyListing)
@@ -145,14 +132,8 @@ function removeListingLabel() {
 }
 
 function buyLabel(goodie: GoodieSft) {
-  return purchasedListingIds.value.includes(goodie.id) ? text.value.bought : text.value.buy
-}
-
-function recordTransaction(actionKey: 'bought' | 'sold' | 'listed', name: string, amount: number) {
-  transactionHistory.value = [
-    { actionKey, name, amount },
-    ...transactionHistory.value,
-  ].slice(0, 8)
+  void goodie
+  return text.value.buy
 }
 
 function modalText() {
@@ -193,15 +174,9 @@ function selectInventoryGoodie(goodie: GoodieSft | null) {
 }
 
 async function buyGoodie(goodie: GoodieSft) {
-  if (purchasedListingIds.value.includes(goodie.id)) {
-    return
-  }
-
   try {
     await requestBuyListing(goodie.id)
-    purchasedListingIds.value = [...purchasedListingIds.value, goodie.id]
     const name = displayName(goodie)
-    recordTransaction('bought', name, -goodie.price)
     storeNotice.value = `${text.value.bought} ${name}`
   } catch {
     storeNotice.value = operationError.buyListing
@@ -220,7 +195,6 @@ async function listSelectedGoodie() {
     const amount = Math.min(maxListingAmount.value, Math.max(1, Math.round(listingAmount.value)))
     const price = Math.max(1, Math.round(listingPrice.value))
     await requestListMarketMaterial(selectedGoodie.id, amount, price)
-    recordTransaction('listed', displayName(selectedGoodie), 0)
     storeNotice.value = `${text.value.listed} ${displayName(selectedGoodie)}`
     closeInventoryModal()
   } catch {
@@ -239,7 +213,6 @@ async function confirmRemoveListing() {
 
   try {
     await requestCancelListing(pendingRemoval.value.id)
-    removedListingIds.value = [...removedListingIds.value, pendingRemoval.value.id]
     storeNotice.value = `${text.value.remove} ${displayName(pendingRemoval.value)}`
     pendingRemoval.value = null
   } catch {
@@ -344,7 +317,7 @@ onMounted(() => {
             </div>
             <button
               type="button"
-              :disabled="purchasedListingIds.includes(goodie.id) || operationLoading.buyListing"
+              :disabled="operationLoading.buyListing"
               @click="buyGoodie(goodie)"
             >
               <i aria-hidden="true"></i>
@@ -413,11 +386,12 @@ onMounted(() => {
                   {{ isZh ? '載入掛單中...' : 'Loading listings...' }}
                 </strong>
                 <template v-else>
-                  <strong>{{ text.emptyListings }}</strong>
+                  <strong>{{ isZh ? '目前沒有上架商品' : text.emptyListings }}</strong>
                   <span>{{ isZh ? '你目前沒有自己的 active 掛單。' : 'You do not have active listings yet.' }}</span>
                 </template>
               </div>
               <article
+                v-else
                 v-for="(goodie, index) in overviewListingSlots"
                 :key="goodie ? goodie.id : `overview-empty-${index}`"
                 class="mini-listing"
@@ -514,18 +488,6 @@ onMounted(() => {
                 <button type="button" @click="loadMaterialBackpack">{{ storeCopy.refresh }}</button>
               </template>
             </div>
-            <div v-if="false && (isBackpackLoading || backpackError || inventoryGoodies.length === 0)" class="inventory-api-state">
-              <strong v-if="isBackpackLoading">{{ isZh ? '載入背包中...' : 'Loading backpack...' }}</strong>
-              <template v-else-if="backpackError">
-                <strong>{{ isZh ? '背包載入失敗' : 'Backpack load failed' }}</strong>
-                <span>{{ backpackError }}</span>
-                <button type="button" @click="loadMaterialBackpack">{{ isZh ? '重試' : 'Retry' }}</button>
-              </template>
-              <template v-else>
-                <strong>{{ text.noMaterial }}</strong>
-                <button type="button" @click="loadMaterialBackpack">{{ isZh ? '重新整理' : 'Refresh' }}</button>
-              </template>
-            </div>
             <button
               v-for="(goodie, index) in inventorySlots"
               :key="goodie?.id ?? `empty-inventory-${index}`"
@@ -562,18 +524,11 @@ onMounted(() => {
               <input v-model.number="listingAmount" type="number" min="1" :max="maxListingAmount" step="1" />
             </label>
             <label>
-              {{ isZh ? '數量' : 'Amount' }}
-              <input v-model.number="listingAmount" type="number" min="1" :max="maxListingAmount" step="1" />
-            </label>
-            <label>
               {{ storeCopy.price }}
               <input v-model.number="listingPrice" type="number" min="1" step="1" />
             </label>
             <button type="button" :disabled="operationLoading.listMarketMaterial" @click="listSelectedGoodie">
               {{ operationLoading.listMarketMaterial ? storeCopy.listing : storeCopy.listItem }}
-            </button>
-            <button v-if="false" type="button" :disabled="operationLoading.listMarketMaterial" @click="listSelectedGoodie">
-              {{ operationLoading.listMarketMaterial ? (isZh ? '上架中' : 'Listing') : text.listSelected }}
             </button>
           </aside>
         </div>
@@ -596,9 +551,6 @@ onMounted(() => {
           <button type="button" @click="cancelRemoveListing">{{ modalText().cancel }}</button>
           <button class="danger" type="button" :disabled="operationLoading.cancelListing" @click="confirmRemoveListing">
             {{ operationLoading.cancelListing ? storeCopy.cancelling : storeCopy.cancelListing }}
-          </button>
-          <button class="danger" type="button" :disabled="operationLoading.cancelListing" @click="confirmRemoveListing">
-            {{ operationLoading.cancelListing ? (isZh ? '移除中' : 'Removing') : modalText().confirm }}
           </button>
         </div>
       </section>

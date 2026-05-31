@@ -86,6 +86,13 @@ export async function getPlayerProfile(userId: string): Promise<PlayerProfile> {
     id: user.id,
     wallet: user.wallet,
     username: user.username,
+    chain: {
+      enabled: isConfiguredContract(env.NFT_CONTRACT_ADDRESS) && Boolean(env.RPC_URL),
+      chainId: env.CHAIN_ID,
+      nftContractAddress: isConfiguredContract(env.NFT_CONTRACT_ADDRESS)
+        ? (env.NFT_CONTRACT_ADDRESS as PlayerProfile['chain']['nftContractAddress'])
+        : null,
+    },
     pets: (pets ?? []).map((pet) => ({
       id: pet.id,
       tokenId: pet.token_id,
@@ -114,4 +121,8 @@ export async function getPlayerProfile(userId: string): Promise<PlayerProfile> {
         }
       : null,
   }
+}
+
+function isConfiguredContract(address: string | undefined) {
+  return Boolean(address && !/^0x0{40}$/i.test(address))
 }

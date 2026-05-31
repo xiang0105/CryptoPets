@@ -3,11 +3,6 @@ import type { PlayerProfile } from '@cryptopets/shared'
 import { loginWithSignature, requestLoginNonce } from '@/api/auth'
 import { clearAuthToken, getAuthToken } from '@/api/client'
 import { getPlayer } from '@/api/game'
-import { replaceGoodies } from '@/data/goodies'
-import { replacePets } from '@/data/pets'
-import { chainDataProvider } from '@/web3/chainData'
-
-const FRONTEND_ONLY_AUTH = import.meta.env.VITE_FRONTEND_ONLY_AUTH !== 'false'
 
 declare global {
   interface Window {
@@ -21,7 +16,6 @@ const walletAddress = ref('')
 const walletError = ref('')
 const player = ref<PlayerProfile | null>(null)
 const isAuthenticating = ref(false)
-const isSyncingChainAssets = ref(false)
 
 const shortWalletAddress = computed(() => {
   if (!walletAddress.value) {
@@ -51,11 +45,6 @@ async function connectWallet() {
     const wallet = accounts[0]
     walletAddress.value = wallet
 
-    if (FRONTEND_ONLY_AUTH) {
-      await syncChainAssets(wallet)
-      return
-    }
-
     const challenge = await requestLoginNonce(wallet)
     const signature = await window.ethereum.request({
       method: 'personal_sign',
@@ -75,12 +64,9 @@ async function connectWallet() {
 
     walletAddress.value = session.player.wallet
     player.value = session.player
-    await syncChainAssets(session.player.wallet)
   } catch (error) {
-    if (walletAddress.value) {
-      await syncChainAssets(walletAddress.value)
-    }
     clearAuthToken()
+    player.value = null
     walletError.value = error instanceof Error ? error.message : 'Wallet login failed'
     throw error
   } finally {
@@ -89,10 +75,6 @@ async function connectWallet() {
 }
 
 async function restoreSession() {
-  if (FRONTEND_ONLY_AUTH) {
-    return
-  }
-
   if (!getAuthToken()) {
     return
   }
@@ -100,30 +82,10 @@ async function restoreSession() {
   try {
     player.value = await getPlayer()
     walletAddress.value = player.value.wallet
-    await syncChainAssets(player.value.wallet)
   } catch {
     clearAuthToken()
-  }
-}
-
-async function syncChainAssets(wallet: string) {
-  isSyncingChainAssets.value = true
-  walletError.value = ''
-
-  try {
-    const [walletPets, walletGoodies] = await Promise.all([
-      chainDataProvider.getWalletPets(wallet),
-      chainDataProvider.getWalletGoodies(wallet),
-    ])
-
-    replacePets(walletPets)
-    replaceGoodies(walletGoodies)
-  } catch (error) {
-    replacePets([])
-    replaceGoodies([])
-    walletError.value = error instanceof Error ? error.message : 'Chain asset sync failed'
-  } finally {
-    isSyncingChainAssets.value = false
+    player.value = null
+    walletAddress.value = ''
   }
 }
 
@@ -133,10 +95,8 @@ export function useWallet() {
     walletError,
     player,
     isAuthenticating,
-    isSyncingChainAssets,
     shortWalletAddress,
     connectWallet,
     restoreSession,
-    syncChainAssets,
   }
 }
