@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { materialDefinitions } from '@cryptopets/game-content'
 import { useGameApi } from '@/composables/useGameApi'
 import { currentMessages, isZh } from '@/i18n'
@@ -9,7 +9,7 @@ const detailCopy = {
   title: '物品詳情',
   materialInfo: '素材資訊',
   emptyName: '空素材格',
-  emptyDescription: '後端已預留鏈上使用者素材資料接口；目前測試階段不可用素材，所以背包維持空格。',
+  emptyDescription: '後端沒有回傳可用素材時，背包會保持空格；若鏈上素材尚未啟用，請以同步狀態為準。',
   stackLimit: '堆疊上限：',
   value: '價值：',
   origin: '來源：',
@@ -19,17 +19,18 @@ const detailCopy = {
   notSynced: '尚未同步',
   discard: '丟棄',
   use: '使用',
-  sellAll: '全部出售',
+  sellAll: '出售',
+  quantity: '數量',
   selectMaterialFirst: '請先選擇素材。',
   actionReserved: '此操作已可點擊，後端動作尚未開放。',
 }
-const slotCount = 30
-const shelfPageSize = 16
+const shelfPageSize = 20
 const selectedSlot = ref(0)
 const shelfPage = ref(0)
 const shelfDirection = ref<'prev' | 'next'>('next')
 const shelfSwitching = ref(false)
 const detailNotice = ref('')
+const actionAmount = ref(1)
 const { materialBackpack: backpack, queryError, queryLoading, resources, loadMaterialBackpack, loadResources } = useGameApi()
 const materialDefinitionById = new Map(materialDefinitions.map((material) => [material.id, material]))
 const isLoadingBackpack = computed(() => queryLoading.backpack)
@@ -67,6 +68,8 @@ const shelfSlots = computed(() => {
 })
 const selectedMaterial = computed(() => materialSlots.value[selectedSlot.value] ?? null)
 const hasMaterials = computed(() => materialSlots.value.some((slot) => slot !== null))
+const canUseSelectedMaterial = computed(() => Boolean(selectedMaterial.value))
+const maxActionAmount = computed(() => Math.max(1, selectedMaterial.value?.amount ?? 1))
 const backpackSource = computed(() => {
   if (!backpack.value) {
     return detailCopy.chainReserved
@@ -92,6 +95,8 @@ function selectSlot(index: number) {
   }
 
   selectedSlot.value = index
+  actionAmount.value = 1
+  detailNotice.value = ''
 }
 
 function goShelfPage(direction: -1 | 1) {
@@ -118,9 +123,11 @@ async function loadBackpack() {
   try {
     await loadMaterialBackpack()
     selectedSlot.value = materialSlots.value.length > 0 ? 0 : 0
+    actionAmount.value = 1
     shelfPage.value = 0
   } catch {
     selectedSlot.value = 0
+    actionAmount.value = 1
     shelfPage.value = 0
   }
 }
@@ -135,8 +142,15 @@ function handleDetailAction(action: string) {
     return
   }
 
-  detailNotice.value = `${action}：${detailCopy.actionReserved}`
+  const amount = Math.min(maxActionAmount.value, Math.max(1, Math.round(actionAmount.value)))
+  actionAmount.value = amount
+  detailNotice.value = `${action} x${amount}：${detailCopy.actionReserved}`
 }
+
+watch(selectedMaterial, () => {
+  actionAmount.value = 1
+  detailNotice.value = ''
+})
 
 onMounted(() => {
   void loadBackpack()
@@ -244,13 +258,31 @@ onBeforeUnmount(() => {
               <dd>{{ syncedAt }}</dd>
             </div>
           </dl>
+          <label class="detail-quantity">
+            <span>{{ detailCopy.quantity }}</span>
+            <input
+              v-model.number="actionAmount"
+              type="number"
+              min="1"
+              :max="maxActionAmount"
+              step="1"
+              :disabled="!canUseSelectedMaterial"
+            />
+            <small>/ {{ maxActionAmount }}</small>
+          </label>
           <p v-if="detailNotice" class="detail-notice">{{ detailNotice }}</p>
         </section>
 
         <footer>
-          <button type="button" @click="handleDetailAction(detailCopy.discard)">{{ detailCopy.discard }}</button>
-          <button type="button" @click="handleDetailAction(detailCopy.use)">{{ detailCopy.use }}</button>
-          <button type="button" @click="handleDetailAction(detailCopy.sellAll)">{{ detailCopy.sellAll }}</button>
+          <button type="button" :disabled="!canUseSelectedMaterial" @click="handleDetailAction(detailCopy.discard)">
+            {{ detailCopy.discard }}
+          </button>
+          <button type="button" :disabled="!canUseSelectedMaterial" @click="handleDetailAction(detailCopy.use)">
+            {{ detailCopy.use }}
+          </button>
+          <button type="button" :disabled="!canUseSelectedMaterial" @click="handleDetailAction(detailCopy.sellAll)">
+            {{ detailCopy.sellAll }}
+          </button>
         </footer>
       </aside>
     </div>
@@ -330,7 +362,7 @@ onBeforeUnmount(() => {
   position: relative;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  grid-template-rows: repeat(4, minmax(0, 1fr));
+  grid-template-rows: repeat(5, minmax(0, 1fr));
   align-items: stretch;
   gap: 10px;
   align-self: stretch;
@@ -579,16 +611,35 @@ onBeforeUnmount(() => {
     'icon name'
     'icon copy'
     'meta meta'
+    'quantity quantity'
     'notice notice';
   align-content: start;
   gap: 9px 12px;
   min-height: 0;
   margin: 10px 10px 0;
   padding: 10px;
+  overflow-y: auto;
+  scrollbar-color: #9e633a #fff3ca;
+  scrollbar-width: thin;
   text-align: left;
   background: #fff3ca;
   border: 4px solid #6a351f;
   border-radius: 7px;
+}
+
+.detail-body::-webkit-scrollbar {
+  width: 10px;
+}
+
+.detail-body::-webkit-scrollbar-track {
+  background: #fff3ca;
+  border-radius: 999px;
+}
+
+.detail-body::-webkit-scrollbar-thumb {
+  background: #9e633a;
+  border: 2px solid #fff3ca;
+  border-radius: 999px;
 }
 
 .detail-body h3 {
@@ -742,6 +793,43 @@ onBeforeUnmount(() => {
   border-radius: 6px;
 }
 
+.detail-quantity {
+  grid-area: quantity;
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 38px;
+  padding: 6px 8px;
+  color: #4b241d;
+  font-size: 13px;
+  font-weight: 1000;
+  background: rgba(255, 255, 255, 0.4);
+  border-radius: 6px;
+}
+
+.detail-quantity input {
+  min-width: 0;
+  width: 100%;
+  height: 28px;
+  padding: 2px 8px;
+  color: #4b241d;
+  font: inherit;
+  background: #fff8de;
+  border: 2px solid #b8702b;
+  border-radius: 6px;
+}
+
+.detail-quantity input:disabled {
+  color: rgba(75, 36, 29, 0.52);
+  background: rgba(255, 255, 255, 0.42);
+  border-color: rgba(106, 53, 31, 0.35);
+}
+
+.detail-quantity small {
+  white-space: nowrap;
+}
+
 .detail-body dl div {
   display: grid;
   grid-template-columns: 82px 1fr;
@@ -798,6 +886,18 @@ onBeforeUnmount(() => {
   transform: translateY(-1px);
 }
 
+.inventory-detail footer button:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.35);
+  opacity: 0.55;
+  transform: none;
+}
+
+.inventory-detail footer button:disabled:hover {
+  filter: grayscale(0.35);
+  transform: none;
+}
+
 .inventory-detail footer button:first-child {
   color: #fff7df;
   background: linear-gradient(#d46d52, #b54a38);
@@ -849,7 +949,7 @@ onBeforeUnmount(() => {
 
   .inventory-shelf {
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    grid-template-rows: repeat(4, minmax(104px, 1fr));
+    grid-template-rows: repeat(5, minmax(104px, 1fr));
     min-height: 0;
     padding: 22px 34px 18px;
   }
@@ -891,7 +991,7 @@ onBeforeUnmount(() => {
 
   .inventory-shelf {
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    grid-template-rows: repeat(4, minmax(70px, 1fr));
+    grid-template-rows: repeat(5, minmax(70px, 1fr));
     gap: 8px;
     min-height: auto;
     padding: 16px 18px 42px;

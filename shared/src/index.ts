@@ -31,6 +31,11 @@ export interface PlayerProfile {
   id: string
   wallet: WalletAddress
   username: string | null
+  chain: {
+    enabled: boolean
+    chainId: number
+    nftContractAddress: WalletAddress | null
+  }
   pets: PlayerPet[]
   activeExpedition: ExpeditionSummary | null
 }
@@ -46,6 +51,15 @@ export interface ExpeditionSummary {
   endsAt: string
   status: ExpeditionStatus
   reward: ExpeditionReward | null
+}
+
+export interface StartExpeditionRequest {
+  petIds: string[]
+  expeditionType?: ExpeditionType
+}
+
+export interface ClaimRewardRequest {
+  expeditionId: string
 }
 
 export interface ExpeditionReward {
@@ -102,6 +116,16 @@ export interface MarketListing {
   updatedAt: string
 }
 
+export interface ListMarketMaterialRequest {
+  materialId: string
+  amount: number
+  price: number
+}
+
+export interface ListingIdRequest {
+  listingId: string
+}
+
 export type TransactionAction = 'reward' | 'list' | 'buy' | 'sell' | 'cancel' | 'upgrade' | 'advance'
 
 export interface PlayerTransaction {
@@ -122,4 +146,8 @@ export interface AuthNonceResponse {
 export interface AuthLoginResponse {
   token: string
   player: PlayerProfile
+}
+
+export interface AddFriendRequest {
+  wallet: string
 }

@@ -6,7 +6,7 @@ export interface ChainDataProvider {
   getWalletGoodies(wallet: string): Promise<GoodieSft[]>
 }
 
-export const localEmptyChainDataProvider: ChainDataProvider = {
+export const chainDataUnavailableProvider: ChainDataProvider = {
   async getWalletPets() {
     return []
   },
@@ -15,4 +15,4 @@ export const localEmptyChainDataProvider: ChainDataProvider = {
   },
 }
 
-export const chainDataProvider = localEmptyChainDataProvider
+export const chainDataProvider = chainDataUnavailableProvider

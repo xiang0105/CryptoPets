@@ -31,11 +31,11 @@ export const en: GameMessages = {
     },
     help: {
       title: 'Help',
-      markdown: '# CryptoPets Help\n\nConnect a wallet to enter the testing flow. Production player data will come from the backend API and on-chain sources.\n\n- Home: choose a forest and watch expedition status.\n- Pet: inspect teams, pet details, and upgrades.\n- Store: browse materials, listings, and transaction activity.\n- Inventory: view reserved material slots while on-chain material loading is disabled for testing.',
+      markdown: '# CryptoPets Help\n\nConnect a wallet to load player data from the backend API. On-chain data is shown only when the backend reports it is available.\n\n- Home: choose a forest and watch expedition status.\n- Pet: inspect pets returned by the backend and choose an expedition team.\n- Store: browse backend market listings and transaction activity.\n- Inventory: view backend material balances and chain sync status.',
     },
     starterGift: {
-      title: 'Testing Starter Pets',
-      body: 'During testing, every login starts a fresh game flow and grants the four starter capybaras. After launch, this will depend on backend and on-chain claim records.',
+      title: 'Backend Pets Loaded',
+      body: 'Your available pets were loaded from the backend. If on-chain ownership is not enabled yet, the backend reports the available fallback data and chain sync status.',
       accept: 'Accept',
       listLabel: 'Gifted capybaras',
     },

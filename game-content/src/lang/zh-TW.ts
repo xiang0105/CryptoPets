@@ -32,11 +32,11 @@ export const zhTW: GameMessages = {
     help: {
       title: '說明',
       markdown:
-        '# CryptoPets 說明\n\n連接錢包後進入測試流程。現階段角色技能與數值用於前端顯示與劇本判定，不代表已實作戰鬥或實際扣血。\n\n- 遠征：選擇森林劇本並查看事件紀錄。\n- 角色：查看隊伍、角色介紹、隊長技能與預留技能設計。\n- 商店：瀏覽素材、上架與交易紀錄。\n- 背包：查看素材庫存與鏈上素材預留欄位。',
+        '# CryptoPets 說明\n\n連接錢包後，玩家資料會從後端 API 載入。鏈上資料尚未啟用時，後端會回傳不可用狀態，前端只顯示對應提示。\n\n- 遠征：選擇森林劇本並查看後端遠征狀態。\n- 角色：查看後端回傳的角色與遠征隊伍。\n- 商店：瀏覽後端市場、上架與交易紀錄。\n- 背包：查看後端素材庫存與鏈上同步狀態。',
     },
     starterGift: {
-      title: '測試起始角色',
-      body: '測試期間，每次確認登入會發放 sakiko、MAX、SONORATO、CANESAN 四隻水豚。正式版會改由後端與鏈上紀錄決定。',
+      title: '後端角色已載入',
+      body: '目前可用角色已從後端載入。若鏈上持有權尚未啟用，後端會回傳可用的後備資料與鏈上同步狀態。',
       accept: '收下',
       listLabel: '獲得的水豚',
     },
@@ -104,7 +104,7 @@ export const zhTW: GameMessages = {
     details: '物品詳情',
     materialInfo: '素材資訊',
     emptyName: '空欄位',
-    emptyDescription: '後端啟用鏈上素材讀取後，素材會顯示在這裡。測試期間可能保持空欄位。',
+    emptyDescription: '後端沒有回傳可用素材時，背包會保持空欄位；若鏈上素材尚未啟用，請以同步狀態為準。',
     stackLimit: '堆疊上限：',
     value: '價值：',
     origin: '來源：',
