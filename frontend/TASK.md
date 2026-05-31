@@ -18,9 +18,9 @@
 ## 待完成：MVP
 
 - [x] 將 Inventory 頁面正式串接 `getMaterialBackpack()`。
-- [ ] 補齊所有 API 的 loading、error、retry、empty state。
+- [x] 補齊所有 API 的 loading、error、retry、empty state。
 - [ ] 將 Pets 頁面的寵物資料來源改為後端彙整資料。
-- [ ] 將 Store 頁面的市場掛單、上架、購買、取消流程完整串接後端。
+- [x] 將 Store 頁面的市場掛單、上架、購買、取消流程完整串接後端。
 - [ ] 將遠征開始與領取獎勵流程完整串接後端。
 - [ ] 統一前端 API 錯誤訊息與使用者可讀文案。
 - [ ] 檢查桌面與手機寬度下的文字、按鈕與卡片是否重疊。

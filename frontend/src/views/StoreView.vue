@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { goodies } from '@/data/goodies'
+import { computed, onMounted, ref } from 'vue'
+import { materialDefinitions } from '@cryptopets/game-content'
 import type { GoodieSft } from '@/data/goodies'
+import { useGameApi } from '@/composables/useGameApi'
 import { currentMessages, isZh } from '@/i18n'
 import { marketCapybaraSprites } from '@/content/gameAssets'
 import marketMap from '@game-content/assets/maps/market.png'
@@ -9,6 +10,41 @@ import marketMap from '@game-content/assets/maps/market.png'
 const text = computed(() => ({
   ...currentMessages.value.store,
 }))
+const storeCopy = {
+  backpackTitle: '素材背包',
+  backpackHint: '素材背包',
+  backpackLoading: '載入素材背包中...',
+  backpackLoadFailed: '素材背包載入失敗',
+  backpackEmpty: '目前沒有可上架素材',
+  retry: '重試',
+  refresh: '重新整理',
+  close: '關閉',
+  select: '選擇',
+  amount: '數量',
+  price: '價格',
+  listItem: '上架素材',
+  listing: '上架中',
+  cancelListing: '取消上架',
+  cancelling: '取消中',
+}
+const {
+  materialBackpackGoodies,
+  ownedMarketGoodies,
+  operationError,
+  operationLoading,
+  playerProfile,
+  purchasableMarketGoodies,
+  queryError,
+  queryLoading,
+  transactions: apiTransactions,
+  loadMarketListings,
+  loadMaterialBackpack,
+  loadPlayerProfile,
+  loadTransactions,
+  requestBuyListing,
+  requestCancelListing,
+  requestListMarketMaterial,
+} = useGameApi()
 
 const shelfPage = ref(0)
 const shelfDirection = ref<'prev' | 'next'>('next')
@@ -18,28 +54,15 @@ const pendingRemoval = ref<GoodieSft | null>(null)
 const isInventoryModalOpen = ref(false)
 const selectedInventoryId = ref('')
 const listingPrice = ref(100)
-const createdListings = ref<GoodieSft[]>([])
+const listingAmount = ref(1)
 const purchasedListingIds = ref<string[]>([])
 const storeNotice = ref('')
 const transactionHistory = ref<Array<{ actionKey: 'bought' | 'sold' | 'listed'; name: string; amount: number }>>([])
 let shelfSwitchTimer: number | undefined
 const shelfPageSize = 16
-const defaultStoreItemCount = 36
 const marketCapybaras = marketCapybaraSprites
-const storeGoodies = computed<GoodieSft[]>(() =>
-  Array.from({ length: defaultStoreItemCount }, (_, index) => {
-    const goodie = goodies[index % goodies.length] ?? goodies[0]
-
-    if (!goodie) {
-      return null
-    }
-
-    return {
-      ...goodie,
-      id: `${goodie.id}-store-${index + 1}`,
-    }
-  }).filter((goodie): goodie is GoodieSft => goodie !== null),
-)
+const materialDefinitionById = new Map(materialDefinitions.map((material) => [material.id, material]))
+const storeGoodies = computed<GoodieSft[]>(() => purchasableMarketGoodies.value)
 const shelfTotalPages = computed(() => Math.max(1, Math.ceil(storeGoodies.value.length / shelfPageSize)))
 const hasPreviousShelfPage = computed(() => shelfPage.value > 0)
 const hasNextShelfPage = computed(() => shelfPage.value < shelfTotalPages.value - 1)
@@ -51,14 +74,14 @@ const shelfSlots = computed<(GoodieSft | null)[]>(() => {
   return [...visibleGoodies, ...Array.from({ length: emptySlotCount }, (): null => null)]
 })
 const overviewListingSlots = computed(() => {
-  const listings = createdListings.value
+  const listings = ownedMarketGoodies.value
     .filter((goodie) => !removedListingIds.value.includes(goodie.id))
     .slice(0, 40)
 
   return [...listings, ...Array.from({ length: Math.max(0, 40 - listings.length) }, () => null)]
 })
 
-const inventoryGoodies = computed(() => goodies.filter((goodie) => goodie.amount > 0))
+const inventoryGoodies = computed(() => materialBackpackGoodies.value)
 const inventorySlots = computed<(GoodieSft | null)[]>(() => {
   const minimumSlots = 4
 
@@ -70,20 +93,36 @@ const inventorySlots = computed<(GoodieSft | null)[]>(() => {
 const selectedInventoryGoodie = computed(() =>
   inventoryGoodies.value.find((goodie) => goodie.id === selectedInventoryId.value) ?? inventoryGoodies.value[0],
 )
+const maxListingAmount = computed(() => Math.max(1, selectedInventoryGoodie.value?.amount ?? 1))
 const transactions = computed(() => {
   const actionLabels = {
     bought: text.value.bought,
     sold: text.value.sold,
     listed: text.value.listed,
   }
+  const apiHistory = apiTransactions.value.map((item) => {
+    const definition = item.materialId ? materialDefinitionById.get(item.materialId) : null
+
+    return {
+      action: item.action,
+      name: definition ? (isZh.value ? definition.name.zh : definition.name.en) : (item.materialId ?? text.value.coins),
+      amount: item.coinAmount,
+    }
+  })
   const liveTransactions = transactionHistory.value.map((item) => ({
     action: actionLabels[item.actionKey],
     name: item.name,
     amount: item.amount,
   }))
 
-  return liveTransactions.slice(0, 8)
+  return [...liveTransactions, ...apiHistory].slice(0, 8)
 })
+const isMarketLoading = computed(() => queryLoading.marketListings)
+const marketError = computed(() => queryError.marketListings || queryError.player || operationError.buyListing)
+const isBackpackLoading = computed(() => queryLoading.backpack)
+const backpackError = computed(() => queryError.backpack || operationError.listMarketMaterial)
+const isTransactionsLoading = computed(() => queryLoading.transactions)
+const transactionsError = computed(() => queryError.transactions)
 
 function displayName(goodie: GoodieSft) {
   return isZh.value ? goodie.name.zh : goodie.name.en
@@ -102,7 +141,7 @@ function coinAmount(amount: number) {
 }
 
 function removeListingLabel() {
-  return text.value.remove
+  return storeCopy.cancelListing
 }
 
 function buyLabel(goodie: GoodieSft) {
@@ -134,7 +173,9 @@ function openInventoryModal() {
 
   selectedInventoryId.value = selectedInventoryId.value || firstGoodie?.id || ''
   listingPrice.value = selectedInventoryGoodie.value?.price ?? 100
+  listingAmount.value = Math.min(listingAmount.value, maxListingAmount.value)
   isInventoryModalOpen.value = true
+  void loadMaterialBackpack()
 }
 
 function closeInventoryModal() {
@@ -148,52 +189,62 @@ function selectInventoryGoodie(goodie: GoodieSft | null) {
 
   selectedInventoryId.value = goodie.id
   listingPrice.value = goodie.price
+  listingAmount.value = Math.min(1, goodie.amount)
 }
 
-function buyGoodie(goodie: GoodieSft) {
+async function buyGoodie(goodie: GoodieSft) {
   if (purchasedListingIds.value.includes(goodie.id)) {
     return
   }
 
-  purchasedListingIds.value = [...purchasedListingIds.value, goodie.id]
-  const name = displayName(goodie)
-  recordTransaction('bought', name, -goodie.price)
-  storeNotice.value = `${text.value.bought} ${name}`
+  try {
+    await requestBuyListing(goodie.id)
+    purchasedListingIds.value = [...purchasedListingIds.value, goodie.id]
+    const name = displayName(goodie)
+    recordTransaction('bought', name, -goodie.price)
+    storeNotice.value = `${text.value.bought} ${name}`
+  } catch {
+    storeNotice.value = operationError.buyListing
+  }
 }
 
-function listSelectedGoodie() {
+async function listSelectedGoodie() {
   const selectedGoodie = selectedInventoryGoodie.value
 
   if (!selectedGoodie) {
-    storeNotice.value = text.value.noMaterial
+    storeNotice.value = storeCopy.backpackEmpty
     return
   }
 
-  const listingIndex = createdListings.value.length + 1
-  const listing: GoodieSft = {
-    ...selectedGoodie,
-    id: `${selectedGoodie.id}-listing-${listingIndex}`,
-    status: 'active',
-    price: Math.max(1, Math.round(listingPrice.value)),
+  try {
+    const amount = Math.min(maxListingAmount.value, Math.max(1, Math.round(listingAmount.value)))
+    const price = Math.max(1, Math.round(listingPrice.value))
+    await requestListMarketMaterial(selectedGoodie.id, amount, price)
+    recordTransaction('listed', displayName(selectedGoodie), 0)
+    storeNotice.value = `${text.value.listed} ${displayName(selectedGoodie)}`
+    closeInventoryModal()
+  } catch {
+    storeNotice.value = operationError.listMarketMaterial
   }
-  createdListings.value = [listing, ...createdListings.value]
-  recordTransaction('listed', displayName(listing), 0)
-  storeNotice.value = `${text.value.listed} ${displayName(listing)}`
-  closeInventoryModal()
 }
 
 function cancelRemoveListing() {
   pendingRemoval.value = null
 }
 
-function confirmRemoveListing() {
+async function confirmRemoveListing() {
   if (!pendingRemoval.value) {
     return
   }
 
-  removedListingIds.value = [...removedListingIds.value, pendingRemoval.value.id]
-  storeNotice.value = `${text.value.remove} ${displayName(pendingRemoval.value)}`
-  pendingRemoval.value = null
+  try {
+    await requestCancelListing(pendingRemoval.value.id)
+    removedListingIds.value = [...removedListingIds.value, pendingRemoval.value.id]
+    storeNotice.value = `${text.value.remove} ${displayName(pendingRemoval.value)}`
+    pendingRemoval.value = null
+  } catch {
+    storeNotice.value = operationError.cancelListing
+  }
 }
 
 function goShelfArea(direction: -1 | 1) {
@@ -215,6 +266,19 @@ function goShelfArea(direction: -1 | 1) {
     }, 360)
   })
 }
+
+function retryMarketData() {
+  void loadPlayerProfile()
+  void loadMarketListings()
+  void loadTransactions()
+}
+
+onMounted(() => {
+  void loadPlayerProfile()
+  void loadMarketListings()
+  void loadTransactions()
+  void loadMaterialBackpack()
+})
 </script>
 
 <template>
@@ -226,6 +290,26 @@ function goShelfArea(direction: -1 | 1) {
       :data-page="shelfPage"
       aria-label="Goodies store shelf"
     >
+      <div v-if="isMarketLoading || marketError || storeGoodies.length === 0" class="market-state" aria-live="polite">
+        <strong v-if="isMarketLoading">{{ isZh ? '載入市場中...' : 'Loading market...' }}</strong>
+        <template v-else-if="marketError">
+          <strong>{{ isZh ? '市場載入失敗' : 'Market load failed' }}</strong>
+          <span>{{ marketError }}</span>
+          <button type="button" @click="retryMarketData">{{ isZh ? '重試' : 'Retry' }}</button>
+        </template>
+        <template v-else>
+          <strong>{{ text.emptyListings }}</strong>
+          <span>
+            {{
+              playerProfile
+                ? (isZh ? '目前沒有可購買的市場掛單。' : 'There are no market listings available to buy.')
+                : (isZh ? '載入玩家資料後會顯示可購買掛單。' : 'Buyable listings appear after player data loads.')
+            }}
+          </span>
+          <button type="button" @click="retryMarketData">{{ isZh ? '重新整理' : 'Refresh' }}</button>
+        </template>
+      </div>
+
       <button
         v-if="hasPreviousShelfPage"
         class="shelf-nav shelf-nav-prev"
@@ -258,7 +342,11 @@ function goShelfArea(direction: -1 | 1) {
               <i aria-hidden="true"></i>
               <span>{{ goodie.price }}</span>
             </div>
-            <button type="button" :disabled="purchasedListingIds.includes(goodie.id)" @click="buyGoodie(goodie)">
+            <button
+              type="button"
+              :disabled="purchasedListingIds.includes(goodie.id) || operationLoading.buyListing"
+              @click="buyGoodie(goodie)"
+            >
               <i aria-hidden="true"></i>
               <span>{{ buyLabel(goodie) }}</span>
             </button>
@@ -302,13 +390,13 @@ function goShelfArea(direction: -1 | 1) {
           </div>
         </div>
 
-        <button class="sell-banner" type="button" @click="openInventoryModal">
+        <div class="sell-banner" aria-hidden="true">
           <span class="basket" aria-hidden="true"></span>
           <span>
             <strong>{{ text.listItem }}</strong>
             <small>{{ text.sellGoodies }}</small>
           </span>
-        </button>
+        </div>
       </div>
 
       <section class="overview-panel" aria-label="Marketplace overview">
@@ -320,6 +408,15 @@ function goShelfArea(direction: -1 | 1) {
           <section class="active-panel">
             <h3>{{ text.activeListings }}</h3>
             <div class="listing-grid">
+              <div v-if="queryLoading.marketListings || queryLoading.player || ownedMarketGoodies.length === 0" class="overview-state">
+                <strong v-if="queryLoading.marketListings || queryLoading.player">
+                  {{ isZh ? '載入掛單中...' : 'Loading listings...' }}
+                </strong>
+                <template v-else>
+                  <strong>{{ text.emptyListings }}</strong>
+                  <span>{{ isZh ? '你目前沒有自己的 active 掛單。' : 'You do not have active listings yet.' }}</span>
+                </template>
+              </div>
               <article
                 v-for="(goodie, index) in overviewListingSlots"
                 :key="goodie ? goodie.id : `overview-empty-${index}`"
@@ -339,7 +436,13 @@ function goShelfArea(direction: -1 | 1) {
                   <div class="mini-image" aria-hidden="true"></div>
                   <footer>
                     <span class="mini-price"><i aria-hidden="true"></i>{{ goodie.price }}</span>
-                    <button type="button" @click="requestRemoveListing(goodie)">{{ removeListingLabel() }}</button>
+                    <button
+                      type="button"
+                      :disabled="operationLoading.cancelListing"
+                      @click="requestRemoveListing(goodie)"
+                    >
+                      {{ operationLoading.cancelListing ? storeCopy.cancelling : removeListingLabel() }}
+                    </button>
                   </footer>
                 </template>
               </article>
@@ -350,6 +453,14 @@ function goShelfArea(direction: -1 | 1) {
             <div class="transaction-list">
               <h3>{{ text.transactions }}</h3>
               <p v-if="storeNotice" class="store-notice">{{ storeNotice }}</p>
+              <p v-if="isTransactionsLoading" class="store-notice">{{ isZh ? '載入交易中...' : 'Loading transactions...' }}</p>
+              <p v-else-if="transactionsError" class="store-notice">
+                {{ transactionsError }}
+                <button type="button" @click="loadTransactions">{{ isZh ? '重試' : 'Retry' }}</button>
+              </p>
+              <p v-else-if="transactions.length === 0" class="store-notice">
+                {{ isZh ? '尚無交易紀錄' : 'No transactions yet' }}
+              </p>
               <p v-for="item in transactions" :key="`${item.action}-${item.name}`">
                 <strong>{{ item.action }}: {{ item.name }}</strong>
                 <span :class="{ gain: item.amount > 0 }">
@@ -385,12 +496,36 @@ function goShelfArea(direction: -1 | 1) {
     >
       <section class="inventory-modal">
         <header>
-          <h2 id="inventory-listing-title">{{ text.inventoryTitle }}</h2>
+          <h2 id="inventory-listing-title">{{ storeCopy.backpackTitle }}</h2>
           <button type="button" aria-label="Close" @click="closeInventoryModal">×</button>
         </header>
 
         <div class="inventory-layout">
-          <div class="inventory-grid" :aria-label="text.inventoryHint">
+          <div class="inventory-grid" :aria-label="storeCopy.backpackHint">
+            <div v-if="isBackpackLoading || backpackError || inventoryGoodies.length === 0" class="inventory-api-state">
+              <strong v-if="isBackpackLoading">{{ storeCopy.backpackLoading }}</strong>
+              <template v-else-if="backpackError">
+                <strong>{{ storeCopy.backpackLoadFailed }}</strong>
+                <span>{{ backpackError }}</span>
+                <button type="button" @click="loadMaterialBackpack">{{ storeCopy.retry }}</button>
+              </template>
+              <template v-else>
+                <strong>{{ storeCopy.backpackEmpty }}</strong>
+                <button type="button" @click="loadMaterialBackpack">{{ storeCopy.refresh }}</button>
+              </template>
+            </div>
+            <div v-if="false && (isBackpackLoading || backpackError || inventoryGoodies.length === 0)" class="inventory-api-state">
+              <strong v-if="isBackpackLoading">{{ isZh ? '載入背包中...' : 'Loading backpack...' }}</strong>
+              <template v-else-if="backpackError">
+                <strong>{{ isZh ? '背包載入失敗' : 'Backpack load failed' }}</strong>
+                <span>{{ backpackError }}</span>
+                <button type="button" @click="loadMaterialBackpack">{{ isZh ? '重試' : 'Retry' }}</button>
+              </template>
+              <template v-else>
+                <strong>{{ text.noMaterial }}</strong>
+                <button type="button" @click="loadMaterialBackpack">{{ isZh ? '重新整理' : 'Refresh' }}</button>
+              </template>
+            </div>
             <button
               v-for="(goodie, index) in inventorySlots"
               :key="goodie?.id ?? `empty-inventory-${index}`"
@@ -409,7 +544,7 @@ function goShelfArea(direction: -1 | 1) {
                   <span class="material-icon" :class="`material-${goodie.element}`"></span>
                 </span>
                 <span class="inventory-price"><i aria-hidden="true"></i>{{ goodie.price }}</span>
-                <span class="inventory-action"><i aria-hidden="true"></i>{{ text.select }}</span>
+                <span class="inventory-action"><i aria-hidden="true"></i>{{ storeCopy.select }}</span>
                 <small>x{{ goodie.amount }}</small>
               </template>
               <template v-else>
@@ -423,10 +558,23 @@ function goShelfArea(direction: -1 | 1) {
             <strong>{{ displayName(selectedInventoryGoodie) }}</strong>
             <small>{{ selectedInventoryGoodie.description }}</small>
             <label>
-              {{ text.price }}
+              {{ storeCopy.amount }}
+              <input v-model.number="listingAmount" type="number" min="1" :max="maxListingAmount" step="1" />
+            </label>
+            <label>
+              {{ isZh ? '數量' : 'Amount' }}
+              <input v-model.number="listingAmount" type="number" min="1" :max="maxListingAmount" step="1" />
+            </label>
+            <label>
+              {{ storeCopy.price }}
               <input v-model.number="listingPrice" type="number" min="1" step="1" />
             </label>
-            <button type="button" @click="listSelectedGoodie">{{ text.listSelected }}</button>
+            <button type="button" :disabled="operationLoading.listMarketMaterial" @click="listSelectedGoodie">
+              {{ operationLoading.listMarketMaterial ? storeCopy.listing : storeCopy.listItem }}
+            </button>
+            <button v-if="false" type="button" :disabled="operationLoading.listMarketMaterial" @click="listSelectedGoodie">
+              {{ operationLoading.listMarketMaterial ? (isZh ? '上架中' : 'Listing') : text.listSelected }}
+            </button>
           </aside>
         </div>
       </section>
@@ -446,7 +594,12 @@ function goShelfArea(direction: -1 | 1) {
         <strong>{{ displayName(pendingRemoval) }}</strong>
         <div class="remove-modal-actions">
           <button type="button" @click="cancelRemoveListing">{{ modalText().cancel }}</button>
-          <button class="danger" type="button" @click="confirmRemoveListing">{{ modalText().confirm }}</button>
+          <button class="danger" type="button" :disabled="operationLoading.cancelListing" @click="confirmRemoveListing">
+            {{ operationLoading.cancelListing ? storeCopy.cancelling : storeCopy.cancelListing }}
+          </button>
+          <button class="danger" type="button" :disabled="operationLoading.cancelListing" @click="confirmRemoveListing">
+            {{ operationLoading.cancelListing ? (isZh ? '移除中' : 'Removing') : modalText().confirm }}
+          </button>
         </div>
       </section>
     </div>
@@ -521,11 +674,53 @@ function goShelfArea(direction: -1 | 1) {
     0 3px 0 rgba(79, 45, 23, 0.24);
 }
 
+.market-state {
+  position: absolute;
+  inset: 22px 34px 15px;
+  z-index: 5;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 9px;
+  padding: 18px;
+  color: #fff7df;
+  text-align: center;
+  background: rgba(85, 48, 26, 0.84);
+  border: 4px solid rgba(255, 239, 192, 0.7);
+  border-radius: 8px;
+}
+
+.market-state strong {
+  font-size: 22px;
+  font-weight: 1000;
+}
+
+.market-state span {
+  max-width: 430px;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.35;
+}
+
+.market-state button,
+.transaction-list button {
+  min-width: 88px;
+  min-height: 30px;
+  color: #6a321c;
+  font-size: 13px;
+  font-weight: 1000;
+  cursor: default;
+  background: linear-gradient(#ffe794, #f7b746);
+  border: 3px solid #b8702b;
+  border-radius: 8px;
+}
+
 .shelf-page-indicator {
   position: absolute;
   right: 18px;
   bottom: 12px;
-  z-index: 4;
+  z-index: 400;
   min-width: 58px;
   padding: 4px 10px 5px;
   color: #fff7df;
@@ -585,6 +780,7 @@ function goShelfArea(direction: -1 | 1) {
   height: 100%;
   padding: 6px 8px 7px;
   overflow: hidden;
+  cursor: default;
   background: linear-gradient(#fff1c8, #ffd889);
   border: 4px solid #6e3d23;
   border-radius: 10px;
@@ -1111,6 +1307,25 @@ function goShelfArea(direction: -1 | 1) {
   scrollbar-width: thin;
 }
 
+.overview-state {
+  grid-column: 1 / -1;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  min-height: 126px;
+  padding: 12px;
+  color: #5e3a23;
+  text-align: center;
+  background: rgba(255, 238, 196, 0.82);
+  border: 3px dashed rgba(110, 61, 35, 0.56);
+  border-radius: 8px;
+}
+
+.overview-state strong,
+.overview-state span {
+  font-weight: 1000;
+}
+
 .empty-listings-note {
   display: grid;
   place-items: center;
@@ -1155,6 +1370,7 @@ function goShelfArea(direction: -1 | 1) {
   grid-template-rows: auto auto auto;
   min-width: 0;
   overflow: hidden;
+  cursor: default;
   padding: 5px 7px 6px;
 }
 
@@ -1323,6 +1539,11 @@ function goShelfArea(direction: -1 | 1) {
   text-align: center;
   background: rgba(200, 232, 158, 0.55);
   border-radius: 6px;
+}
+
+.transaction-list .store-notice button {
+  display: block;
+  margin: 6px auto 0;
 }
 
 .transaction-list span {
@@ -1539,6 +1760,38 @@ function goShelfArea(direction: -1 | 1) {
   display: none;
 }
 
+.inventory-api-state {
+  grid-column: 1 / -1;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  min-height: 160px;
+  padding: 14px;
+  color: #fff7df;
+  text-align: center;
+  background: rgba(85, 48, 26, 0.84);
+  border: 3px solid rgba(255, 239, 192, 0.7);
+  border-radius: 8px;
+}
+
+.inventory-api-state strong,
+.inventory-api-state span {
+  overflow-wrap: anywhere;
+  font-weight: 1000;
+}
+
+.inventory-api-state button {
+  min-width: 88px;
+  min-height: 30px;
+  margin-top: 8px;
+  color: #6a321c;
+  font-weight: 1000;
+  cursor: pointer;
+  background: linear-gradient(#ffe794, #f7b746);
+  border: 3px solid #b8702b;
+  border-radius: 8px;
+}
+
 .inventory-slot {
   position: relative;
   display: grid;
@@ -1719,6 +1972,11 @@ function goShelfArea(direction: -1 | 1) {
   width: 100%;
   font-size: 14px;
   font-weight: 1000;
+}
+
+.inventory-detail label:nth-of-type(2),
+.remove-modal-actions button.danger + button.danger {
+  display: none;
 }
 
 .inventory-detail input {
@@ -1994,6 +2252,10 @@ function goShelfArea(direction: -1 | 1) {
     min-height: auto;
     padding: 16px 18px 42px;
     border-width: 4px;
+  }
+
+  .market-state {
+    inset: 16px 18px 42px;
   }
 
   .shelf-page-indicator {

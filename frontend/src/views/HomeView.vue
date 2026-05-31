@@ -1,6 +1,7 @@
 ﻿<script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { pets, type Pet } from '@/data/pets'
+import { useGameApi } from '@/composables/useGameApi'
 import { expeditionTeamPets } from '@/state/expeditionTeam'
 import { grantSkillPoints } from '@/state/testProgress'
 import { petImages, yuzuBiteFrames } from '@/content/gameAssets'
@@ -20,6 +21,15 @@ const elementMeta = petElementMeta
 const text = computed(() => ({
   ...currentMessages.value.home,
 }))
+const {
+  operationError,
+  operationLoading,
+  queryError,
+  queryLoading,
+  loadPlayerProfile,
+  claimActiveExpedition,
+  startTeamExpedition,
+} = useGameApi()
 
 const fruitFrames = yuzuBiteFrames
 type ForestId = ExpeditionForest['id']
@@ -33,6 +43,7 @@ interface ExpeditionLogEntry {
 
 interface ExpeditionRecord {
   id: ForestId
+  apiId?: string
   startedAt: number
   finishAt: number
   logs: ExpeditionLogEntry[]
@@ -47,6 +58,7 @@ const logLinesElement = ref<HTMLElement | null>(null)
 const now = ref(Date.now())
 const activeExpedition = ref<ExpeditionRecord | null>(loadStoredExpedition())
 const expeditionHistory = ref<ExpeditionLogEntry[]>(loadStoredExpeditionHistory())
+const lastSelectedForest = ref<ForestOption | null>(null)
 let fruitTimer: number | undefined
 let clockTimer: number | undefined
 let fruitCycleStarted = 0
@@ -289,14 +301,28 @@ function buildExpeditionLogs(forest: ForestOption, startedAt: number): Expeditio
   return [firstEntry, ...scriptEntries, finishEntry]
 }
 
-function startExpedition(forest: ForestOption) {
+const expeditionStatusError = computed(() => queryError.player || operationError.startExpedition || operationError.claimReward)
+const isExpeditionStatusLoading = computed(() => queryLoading.player || operationLoading.startExpedition || operationLoading.claimReward)
+
+async function startExpedition(forest: ForestOption) {
   if (activeExpedition.value) {
+    return
+  }
+
+  lastSelectedForest.value = forest
+  const teamPetIds = currentExpeditionTeam().map((pet) => pet.id)
+  let apiSummary
+
+  try {
+    apiSummary = await startTeamExpedition(teamPetIds, forest.id)
+  } catch {
     return
   }
 
   const startedAt = Date.now()
   const record: ExpeditionRecord = {
     id: forest.id,
+    apiId: apiSummary.id,
     startedAt,
     finishAt: startedAt + forest.durationSeconds * 1000,
     logs: buildExpeditionLogs(forest, startedAt),
@@ -306,9 +332,25 @@ function startExpedition(forest: ForestOption) {
   saveStoredExpedition(record)
 }
 
-function completeExpedition() {
+async function retryStartExpedition() {
+  if (!lastSelectedForest.value) {
+    return
+  }
+
+  await startExpedition(lastSelectedForest.value)
+}
+
+async function completeExpedition() {
   if (!activeExpedition.value || !isExpeditionComplete.value || !selectedForest.value) {
     return
+  }
+
+  if (activeExpedition.value.apiId) {
+    try {
+      await claimActiveExpedition(activeExpedition.value.apiId)
+    } catch {
+      return
+    }
   }
 
   expeditionHistory.value = [...activeExpedition.value.logs, ...expeditionHistory.value]
@@ -323,11 +365,12 @@ function completeExpedition() {
 
 function syncCompletedExpedition() {
   if (activeExpedition.value && Date.now() >= activeExpedition.value.finishAt) {
-    completeExpedition()
+    now.value = Date.now()
   }
 }
 
 onMounted(() => {
+  void loadPlayerProfile()
   syncCompletedExpedition()
   scrollLogToLatest()
   fruitCycleStarted = performance.now()
@@ -386,6 +429,7 @@ onUnmounted(() => {
               class="forest-choice"
               :class="`forest-${forest.id}`"
               type="button"
+              :disabled="isExpeditionStatusLoading"
               @click="startExpedition(forest)"
             >
               <strong>{{ displayForestName(forest) }}</strong>
@@ -393,6 +437,12 @@ onUnmounted(() => {
               <small>Lv. {{ forest.difficulty }} · {{ forest.durationSeconds }}s · {{ forest.reward }}</small>
               <b>{{ text.start }}</b>
             </button>
+            <div v-if="expeditionStatusError" class="expedition-api-state" aria-live="polite">
+              <strong>{{ expeditionStatusError }}</strong>
+              <button type="button" :disabled="isExpeditionStatusLoading || !lastSelectedForest" @click="retryStartExpedition">
+                {{ isZh ? '重試' : 'Retry' }}
+              </button>
+            </div>
           </div>
           <div class="sunbeam"></div>
           <div class="castle"></div>
@@ -434,6 +484,15 @@ onUnmounted(() => {
               <strong>{{ text.goal }}:</strong>
               <span>{{ missionGoal }}</span>
             </div>
+            <button
+              v-if="isExpeditionComplete"
+              class="claim-reward-button"
+              type="button"
+              :disabled="operationLoading.claimReward"
+              @click="completeExpedition"
+            >
+              {{ operationLoading.claimReward ? (isZh ? '回報中' : 'Claiming') : (isZh ? '回報' : 'Claim') }}
+            </button>
           </div>
         </div>
       </section>
@@ -453,9 +512,12 @@ onUnmounted(() => {
               <span class="log-message">{{ log.message }}</span>
             </p>
             <span v-if="visibleLogEntries.length === 0"></span>
-            <span v-if="visibleLogEntries.length === 0"></span>
-            <span v-if="visibleLogEntries.length === 0"></span>
-            <span v-if="visibleLogEntries.length === 0"></span>
+            <p v-if="visibleLogEntries.length === 0" class="is-notice">
+              <span class="log-message">{{ isZh ? '尚無遠征紀錄' : 'No expedition logs yet' }}</span>
+            </p>
+            <p v-if="operationError.claimReward" class="is-notice">
+              <span class="log-message">{{ operationError.claimReward }}</span>
+            </p>
             <span class="log-bottom-spacer" aria-hidden="true"></span>
           </div>
         </div>
@@ -1094,6 +1156,57 @@ onUnmounted(() => {
   transform: translateY(-2px);
 }
 
+.forest-choice:disabled {
+  cursor: wait;
+  filter: grayscale(0.35);
+}
+
+.expedition-api-state {
+  display: grid;
+  gap: 8px;
+  width: min(300px, 30%);
+  min-height: clamp(190px, 36vh, 260px);
+  align-content: center;
+  padding: 16px;
+  color: #fff7df;
+  text-align: center;
+  background: rgba(105, 50, 38, 0.9);
+  border: 3px solid rgba(255, 230, 160, 0.84);
+  border-radius: 8px;
+}
+
+.expedition-api-state strong {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.expedition-api-state button,
+.claim-reward-button {
+  min-height: 34px;
+  color: #26582b;
+  font-weight: 1000;
+  cursor: pointer;
+  background: linear-gradient(#c8e89e, #7fc165);
+  border: 3px solid #fff7df;
+  border-radius: 7px;
+}
+
+.claim-reward-button {
+  position: absolute;
+  right: 22px;
+  bottom: 76px;
+  z-index: 12;
+  min-width: 96px;
+  color: #fff7df;
+  background: #4b8e82;
+}
+
+.claim-reward-button:disabled,
+.expedition-api-state button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
 .forest-choice strong {
   min-width: 0;
   font-size: clamp(17px, 2.2vw, 25px);
@@ -1489,6 +1602,21 @@ onUnmounted(() => {
     min-width: 58px;
     padding: 4px 7px;
     font-size: 11px;
+  }
+
+  .expedition-api-state {
+    width: min(360px, 94%);
+    min-height: 58px;
+    padding: 8px 10px;
+  }
+
+  .claim-reward-button {
+    right: 8px;
+    bottom: 58px;
+    min-width: 76px;
+    min-height: 28px;
+    font-size: 12px;
+    border-width: 2px;
   }
 
   .mission-footer {
