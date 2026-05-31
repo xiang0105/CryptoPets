@@ -1,21 +1,21 @@
 import crypto from 'node:crypto'
 import { z } from 'zod'
 import type { ExpeditionReward, ExpeditionSummary } from '@cryptopets/shared'
-import { materialIds } from '@cryptopets/game-content'
+import { expeditionForests, materialIds, type ForestId } from '@cryptopets/game-content'
 import { supabase } from '../config/supabase.js'
 import { HttpError } from '../utils/httpError.js'
 import { materialBalanceProvider } from './materialBalanceProvider.js'
 
 const startExpeditionSchema = z.object({
   petIds: z.array(z.string().uuid()).min(1).max(4),
-  expeditionType: z.enum(['forest', 'market', 'training']).default('forest'),
+  expeditionType: z.enum(expeditionForests.map((forest) => forest.id) as ['orange', 'apple', 'snow-peach']).default('orange'),
 })
 
 const claimRewardSchema = z.object({
   expeditionId: z.string().uuid(),
 })
 
-const EXPEDITION_DURATION_MS = 60 * 60 * 1000
+const expeditionForestById = new Map(expeditionForests.map((forest) => [forest.id, forest]))
 
 export async function startExpedition(userId: string, input: unknown): Promise<ExpeditionSummary> {
   const body = startExpeditionSchema.parse(input)
@@ -55,7 +55,8 @@ export async function startExpedition(userId: string, input: unknown): Promise<E
   }
 
   const now = new Date()
-  const endsAt = new Date(now.getTime() + EXPEDITION_DURATION_MS)
+  const forest = expeditionForestById.get(body.expeditionType as ForestId)
+  const endsAt = new Date(now.getTime() + (forest?.durationSeconds ?? 60) * 1000)
 
   const { data: expedition, error } = await supabase
     .from('expeditions')
@@ -68,7 +69,7 @@ export async function startExpedition(userId: string, input: unknown): Promise<E
       status: 'started',
       reward: null,
     })
-    .select('id,pet_ids,started_at,ends_at,status,reward')
+    .select('id,pet_ids,expedition_type,started_at,ends_at,status,reward')
     .single()
 
   if (error || !expedition) {
@@ -78,6 +79,7 @@ export async function startExpedition(userId: string, input: unknown): Promise<E
   return {
     id: expedition.id,
     petIds: expedition.pet_ids,
+    expeditionType: expedition.expedition_type,
     startedAt: expedition.started_at,
     endsAt: expedition.ends_at,
     status: expedition.status,
@@ -90,7 +92,7 @@ export async function claimReward(userId: string, input: unknown): Promise<Exped
 
   const { data: expedition, error: lookupError } = await supabase
     .from('expeditions')
-    .select('id,user_id,pet_ids,started_at,ends_at,status,reward')
+    .select('id,user_id,pet_ids,expedition_type,started_at,ends_at,status,reward')
     .eq('id', body.expeditionId)
     .eq('user_id', userId)
     .single()
@@ -120,7 +122,7 @@ export async function claimReward(userId: string, input: unknown): Promise<Exped
     })
     .eq('id', expedition.id)
     .eq('status', 'started')
-    .select('id,pet_ids,started_at,ends_at,status,reward')
+    .select('id,pet_ids,expedition_type,started_at,ends_at,status,reward')
     .single()
 
   if (updateError || !updated) {
@@ -133,6 +135,7 @@ export async function claimReward(userId: string, input: unknown): Promise<Exped
   return {
     id: updated.id,
     petIds: updated.pet_ids,
+    expeditionType: updated.expedition_type,
     startedAt: updated.started_at,
     endsAt: updated.ends_at,
     status: updated.status,

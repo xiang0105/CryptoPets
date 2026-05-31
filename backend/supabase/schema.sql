@@ -87,7 +87,7 @@ create table if not exists public.expeditions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.users(id) on delete cascade,
   pet_ids uuid[] not null check (array_length(pet_ids, 1) between 1 and 4),
-  expedition_type text not null default 'forest' check (expedition_type in ('forest', 'market', 'training')),
+  expedition_type text not null default 'orange' check (expedition_type in ('orange', 'apple', 'snow-peach')),
   started_at timestamptz not null default now(),
   ends_at timestamptz not null,
   claimed_at timestamptz,
@@ -95,6 +95,16 @@ create table if not exists public.expeditions (
   reward jsonb,
   created_at timestamptz not null default now()
 );
+
+alter table public.expeditions
+  alter column expedition_type set default 'orange';
+
+alter table public.expeditions
+  drop constraint if exists expeditions_expedition_type_check;
+
+alter table public.expeditions
+  add constraint expeditions_expedition_type_check
+  check (expedition_type in ('orange', 'apple', 'snow-peach')) not valid;
 
 create table if not exists public.friends (
   user_id uuid not null references public.users(id) on delete cascade,

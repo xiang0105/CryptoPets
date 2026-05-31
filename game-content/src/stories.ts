@@ -9,6 +9,8 @@ export interface StoryCondition {
   operator?: StoryCheckOperator
   value?: number
   leaderElement?: PetElement
+  teamPetName?: string
+  chancePercent?: number
 }
 
 export interface StoryOutcome {
@@ -46,290 +48,384 @@ export interface GameStoryChapter {
   beats: StoryBeat[]
 }
 
+const canesanSlay: StoryOutcome = {
+  id: 'canesan-monster-slay',
+  condition: { teamPetName: 'CANESAN', chancePercent: 5 },
+  text: {
+    zh: 'CANESAN 的武士之魂突然爆發，抓住怪物破綻一擊制勝，隊伍獲得大量獎勵。',
+    en: 'CANESAN\'s samurai spirit flared at the perfect moment, defeating the monster in one decisive strike and earning a large reward.',
+  },
+  rewardMultiplier: 1.5,
+  tags: ['canesan', 'monster', 'script-simulation'],
+}
+
+const commonEvents: StoryBeat[] = [
+  {
+    id: 'common-giant-beetle',
+    setup: {
+      zh: '一隻巨大的金龜子正在啃食擋路的巨大橘子，對你們發出了威嚇！',
+      en: 'A giant beetle was chewing on a huge orange blocking the road and threatened the party.',
+    },
+    outcomes: [
+      canesanSlay,
+      {
+        id: 'beetle-high-hp',
+        condition: { metric: 'teamHp', operator: 'gte', value: 200 },
+        text: {
+          zh: '水豚們靠著厚實的血量與金龜子硬碰硬，成功把牠撞飛，獲得經驗值與微量素材。',
+          en: 'With enough HP, the capybaras stood their ground and knocked the beetle away, earning experience and a small amount of materials.',
+        },
+        rewardMultiplier: 1.1,
+      },
+      {
+        id: 'beetle-low-hp',
+        text: {
+          zh: '水豚們體力不支被金龜子撞飛，灰頭土臉地繞路。全體受到 15 傷害，遠征時間稍微增加。',
+          en: 'The party lacked stamina and was knocked aside, forcing a messy detour. Everyone takes 15 damage in the script and the expedition slows slightly.',
+        },
+        rewardMultiplier: 0.9,
+        tags: ['damage-display'],
+      },
+    ],
+  },
+  {
+    id: 'common-syrup-snake',
+    setup: {
+      zh: '一隻糖漿蛇從樹上飛撲下來攻擊一隻水豚。',
+      en: 'A syrup snake leapt down from a tree and attacked one capybara.',
+    },
+    outcomes: [
+      canesanSlay,
+      {
+        id: 'snake-high-atk',
+        condition: { metric: 'teamAtk', operator: 'gte', value: 150 },
+        text: {
+          zh: '隊伍攻擊達標，成功擊倒糖漿蛇，獲得初級進化道具。',
+          en: 'The party met the attack requirement, defeated the syrup snake, and gained a basic evolution item.',
+        },
+        rewardMultiplier: 1.2,
+      },
+      {
+        id: 'snake-low-atk',
+        text: {
+          zh: '糖漿蛇咬了一隻水豚後飛速逃跑。該水豚在劇本中受到 80 - DEF 的傷害並中毒。',
+          en: 'The syrup snake bit one capybara and fled. In the script, that capybara takes 80 minus DEF damage and becomes poisoned.',
+        },
+        rewardMultiplier: 0.85,
+        tags: ['damage-display', 'poison'],
+      },
+    ],
+  },
+  {
+    id: 'common-acid-slime',
+    setup: {
+      zh: '一隻充滿強酸的「特酸史萊姆」從樹上掉了下來，身體劇烈膨脹準備自爆！',
+      en: 'A highly acidic slime fell from a tree, swelling violently as it prepared to explode.',
+    },
+    outcomes: [
+      canesanSlay,
+      {
+        id: 'slime-high-atk',
+        condition: { metric: 'teamAtk', operator: 'gte', value: 180 },
+        text: {
+          zh: '隊伍在牠自爆前發動猛烈攻擊將其擊潰，成功提取了純淨的酸液素材，獎勵大幅提升。',
+          en: 'The party struck hard before it exploded, extracting pure acidic material and greatly improving the reward.',
+        },
+        rewardMultiplier: 1.35,
+      },
+      {
+        id: 'slime-low-atk',
+        text: {
+          zh: '攻擊力不足以秒殺，史萊姆成功自爆！強酸四濺，腐蝕了部分剛採集到的素材，並造成真實傷害。',
+          en: 'The party lacked enough attack to stop it. The slime exploded, acid splashed everywhere, some gathered materials were ruined, and the script applies true damage.',
+        },
+        rewardMultiplier: 0.7,
+        tags: ['damage-display'],
+      },
+    ],
+  },
+  {
+    id: 'common-orchard-spirit',
+    setup: {
+      zh: '發現一隻發著微光的果園精靈被巨大的毒蜘蛛網死死纏住了！',
+      en: 'The party found a faintly glowing orchard spirit trapped in a huge poisonous spider web.',
+    },
+    outcomes: [
+      {
+        id: 'spirit-ember-leader',
+        condition: { leaderElement: 'ember' },
+        text: {
+          zh: '火花隊長精準地噴吐火花燒毀蛛網，精靈為了報恩給予強效祝福。無傷過關，獎勵增加。',
+          en: 'The ember leader burned away the web with precise sparks. The grateful spirit gave a strong blessing, increasing the reward with no harm taken.',
+        },
+        rewardMultiplier: 1.2,
+        tags: ['leader-element'],
+      },
+      {
+        id: 'spirit-frost-leader',
+        condition: { leaderElement: 'frost' },
+        text: {
+          zh: '冰霜隊長將蛛網瞬間凍結後輕易敲碎，救出了精靈。無傷過關，獎勵增加。',
+          en: 'The frost leader froze the web and shattered it easily, rescuing the spirit with no harm and increasing the reward.',
+        },
+        rewardMultiplier: 1.2,
+        tags: ['leader-element'],
+      },
+      {
+        id: 'spirit-normal',
+        text: {
+          zh: '水豚們只能七手八腳地強行扯破蛛網，過程中被隱藏的毒蜘蛛咬傷，全體受到中毒傷害。',
+          en: 'The party had to tear the web apart by force and was bitten by hidden poisonous spiders. The whole party receives poison damage in the script.',
+        },
+        rewardMultiplier: 0.85,
+        tags: ['poison'],
+      },
+    ],
+  },
+  {
+    id: 'common-special-chest',
+    setup: {
+      zh: '在森林深處遇到了一個特別的寶箱，隊伍試著打開它。',
+      en: 'Deep in the forest, the party found a special chest and tried to open it.',
+    },
+    outcomes: [
+      canesanSlay,
+      {
+        id: 'chest-nothing',
+        condition: { chancePercent: 20 },
+        text: {
+          zh: '寶箱裡面沒什麼有用的，隊伍什麼都沒得到。',
+          en: 'There was nothing useful inside, and the party gained nothing.',
+        },
+      },
+      {
+        id: 'chest-evolution-item',
+        condition: { chancePercent: 75 },
+        text: {
+          zh: '寶箱裡有些有趣的東西，隊伍獲得初階進化道具。',
+          en: 'The chest held something interesting, and the party gained a basic evolution item.',
+        },
+        rewardMultiplier: 1.2,
+      },
+      {
+        id: 'chest-acid-slime',
+        text: {
+          zh: '寶箱裡竟然跳出特酸橘子史萊姆！高級史萊姆自爆，全體受到 50% 最大生命值的真實傷害，但仍獲得初階進化道具。',
+          en: 'A sour orange slime jumped out of the chest. The advanced slime exploded, dealing true damage equal to 50% max HP in the script, but the party still gained a basic evolution item.',
+        },
+        rewardMultiplier: 1.05,
+        tags: ['monster', 'damage-display'],
+      },
+    ],
+  },
+]
+
+const orangeOnlyEvents: StoryBeat[] = [
+  {
+    id: 'orange-thorn-flower-field',
+    setup: {
+      zh: '前方是一片充滿香氣的橘子花海，但裡頭佈滿了帶刺的藤蔓。',
+      en: 'Ahead was a fragrant orange flower field filled with thorny vines.',
+    },
+    outcomes: [
+      {
+        id: 'orange-field-citrus-leader',
+        condition: { leaderElement: 'citrus' },
+        text: {
+          zh: '柑橘隊長憑藉著對柑橘香氣的敏銳嗅覺，輕鬆找到安全路徑。無傷通過，並在花叢中找到初階進化道具。',
+          en: 'The citrus leader used its sharp sense for citrus scents to find a safe route, passing unharmed and finding a basic evolution item among the flowers.',
+        },
+        rewardMultiplier: 1.2,
+        tags: ['leader-element'],
+      },
+      {
+        id: 'orange-field-normal',
+        text: {
+          zh: '水豚們只能強行擠過藤蔓叢，全體受到 30 傷害。',
+          en: 'The capybaras had to push through the vines by force, taking 30 damage in the script.',
+        },
+        rewardMultiplier: 0.9,
+        tags: ['damage-display'],
+      },
+    ],
+  },
+  {
+    id: 'orange-rolling-giant-orange',
+    setup: {
+      zh: '有一顆超巨大的橘子由山坡上滾下來了，似乎沒有地方可以躲，只能硬接了。',
+      en: 'A gigantic orange rolled down the hill. There seemed to be nowhere to dodge, so the party had to catch it head-on.',
+    },
+    outcomes: [
+      {
+        id: 'rolling-orange-high-def',
+        condition: { metric: 'teamDef', operator: 'gte', value: 150 },
+        text: {
+          zh: '隊伍防禦達標，大家平穩地接下橘子，獲得額外果肉。',
+          en: 'The party met the defense requirement and caught the orange steadily, gaining extra pulp.',
+        },
+        rewardMultiplier: 1.2,
+      },
+      {
+        id: 'rolling-orange-low-def',
+        text: {
+          zh: '隊伍沒做好防備，全體在劇本中受到傷害並緩速。',
+          en: 'The party was not prepared, so everyone takes damage and is slowed in the script.',
+        },
+        rewardMultiplier: 0.85,
+        tags: ['damage-display', 'slow'],
+      },
+    ],
+  },
+  {
+    id: 'orange-sticky-marsh',
+    setup: {
+      zh: '隊伍不小心走入了一片散發著甜香的黏稠橘子泥沼，越掙扎陷得越深！',
+      en: 'The party accidentally stepped into a sticky orange marsh with a sweet aroma, sinking deeper the more they struggled.',
+    },
+    outcomes: [
+      {
+        id: 'marsh-high-power',
+        condition: { metric: 'teamPower', operator: 'gte', value: 350 },
+        text: {
+          zh: '水豚們展現出驚人的綜合實力，硬生生拔出泥沼，還在底部撈到了前人遺留的寶物，獲得額外掉落。',
+          en: 'The capybaras showed impressive overall power, pulled themselves free, and found treasure left at the bottom for extra drops.',
+        },
+        rewardMultiplier: 1.25,
+      },
+      {
+        id: 'marsh-low-power',
+        text: {
+          zh: '隊伍在泥沼中折騰了半天才狼狽脫身，全身黏糊糊的，體力大量流失，獎勵稍微降低。',
+          en: 'The party struggled for a long time before escaping, sticky and exhausted, slightly reducing the reward.',
+        },
+        rewardMultiplier: 0.9,
+      },
+    ],
+  },
+]
+
+const appleOnlyEvents: StoryBeat[] = [
+  {
+    id: 'apple-hard-fruit-storm',
+    setup: {
+      zh: '隊伍經過一棵古老的巨大蘋果樹下，突然颳起一陣狂風，樹上如落石般砸下一陣密集的巨型硬蘋果！',
+      en: 'As the party passed under an ancient giant apple tree, a gust of wind shook loose a storm of huge hard apples like falling stones.',
+    },
+    outcomes: [
+      {
+        id: 'apple-storm-high-hp',
+        condition: { metric: 'teamHp', operator: 'gte', value: 250 },
+        text: {
+          zh: '水豚們靠著厚實的脂肪與充沛的體力，把掉下來的巨型蘋果當成足球頂來頂去，玩得不亦樂乎。無傷通過，並獲得大量素材。',
+          en: 'With thick padding and plenty of stamina, the capybaras bounced the falling apples around like footballs, passing unharmed and gaining many materials.',
+        },
+        rewardMultiplier: 1.3,
+      },
+      {
+        id: 'apple-storm-low-hp',
+        text: {
+          zh: '躲避不及的水豚們被砸得滿頭包，眼冒金星地逃出樹下。全體在劇本中受到 100 - DEF 的物理傷害，且暈眩導致遠征進度稍微落後。',
+          en: 'The capybaras failed to dodge and fled with bumps on their heads. In the script, everyone takes 100 minus DEF physical damage and falls slightly behind due to dizziness.',
+        },
+        rewardMultiplier: 0.85,
+        tags: ['damage-display', 'stun'],
+      },
+    ],
+  },
+]
+
+const snowPeachOnlyEvents: StoryBeat[] = [
+  {
+    id: 'snow-peach-frozen-peach',
+    setup: {
+      zh: '前方的必經之路，被一顆宛如小山般巨大、且散發著驚人寒氣的「急凍紅蜜桃」給完全堵死了。',
+      en: 'The required path ahead was completely blocked by a mountain-sized frozen red peach radiating intense cold.',
+    },
+    outcomes: [
+      {
+        id: 'frozen-peach-ember-leader',
+        condition: { leaderElement: 'ember' },
+        text: {
+          zh: '火花隊長發揮極大的屬性優勢，吐出溫暖的火焰，直接把急凍蜜桃烤成熱呼呼的蜜桃烤泥，大家飽餐一頓。全體 HP 恢復 100%，並額外獲得高級素材。',
+          en: 'The ember leader used its elemental advantage, warming the frozen peach into hot baked peach mash. Everyone feasted, restoring 100% HP in the script and gaining advanced materials.',
+        },
+        rewardMultiplier: 1.35,
+        tags: ['leader-element', 'heal-display'],
+      },
+      {
+        id: 'frozen-peach-frost-leader',
+        condition: { leaderElement: 'frost' },
+        text: {
+          zh: '冰霜隊長對寒氣完全免疫，開心地在巨大的冰蜜桃上溜冰，順勢用爪子鑿出一條安全的隧道。無傷快速通過，並獲得萬年冰晶。',
+          en: 'The frost leader was immune to the chill, happily skated across the giant frozen peach, and carved a safe tunnel with its claws. The party passed quickly and gained ancient ice crystals.',
+        },
+        rewardMultiplier: 1.3,
+        tags: ['leader-element'],
+      },
+      {
+        id: 'frozen-peach-normal',
+        text: {
+          zh: '水豚們只能無奈地用牙齒慢慢啃出一條路，結果集體嚴重腦袋結冰。全體受到 25 點真實傷害。',
+          en: 'The capybaras had no choice but to slowly chew through a path, giving everyone a severe brain freeze. The script applies 25 true damage to the whole party.',
+        },
+        rewardMultiplier: 0.85,
+        tags: ['damage-display'],
+      },
+    ],
+  },
+]
+
 export const expeditionForests: ExpeditionForest[] = [
   {
     id: 'orange',
-    asset: {
-      iconKey: 'forest-orange',
-    },
+    asset: { iconKey: 'forest-orange' },
     difficulty: 1,
     durationSeconds: 45,
     reward: 'Yuzu x2',
     name: { zh: '橘子森林', en: 'Orange Forest' },
-    summary: { zh: '路線短、資源穩定，適合測試新隊伍。', en: 'A short, stable route for testing new parties.' },
-    scriptEvents: [
-      {
-        id: 'orange-peel-trail',
-        setup: { zh: '隊伍在橘子樹下找到發光果皮。', en: 'The party found glowing peel under an orange tree.' },
-        outcomes: [
-          {
-            id: 'orange-peel-citrus-leader',
-            condition: { leaderElement: 'citrus' },
-            text: {
-              zh: '隊長的柑橘屬性與果皮氣味共鳴，隊伍快速找到安全路線。',
-              en: 'The citrus leader resonated with the peel scent and quickly found a safe route.',
-            },
-            rewardMultiplier: 1.15,
-            tags: ['leader-element'],
-          },
-          {
-            id: 'orange-peel-normal',
-            text: {
-              zh: '隊伍沿著果皮微光前進，穩定記下森林路線。',
-              en: 'The party followed the glow and steadily mapped the forest route.',
-            },
-          },
-        ],
-      },
-      {
-        id: 'orange-slick-moss',
-        setup: { zh: '濕滑青苔覆蓋小徑。', en: 'Slick moss covered the path.' },
-        outcomes: [
-          {
-            id: 'orange-moss-high-defense',
-            condition: { metric: 'teamDef', operator: 'gte', value: 220 },
-            text: {
-              zh: '隊伍防禦足夠，前排水豚穩住隊形，沒有浪費太多時間。',
-              en: 'The party had enough defense to hold formation without losing much time.',
-            },
-            rewardMultiplier: 1.1,
-          },
-          {
-            id: 'orange-moss-slip',
-            text: {
-              zh: '隊伍稍微打滑，只能放慢腳步繞過濕地。',
-              en: 'The party slipped slightly and had to slow down around the wet ground.',
-            },
-            rewardMultiplier: 0.95,
-          },
-        ],
-      },
-      {
-        id: 'orange-rolling-fruit',
-        setup: { zh: '巨大的橘子從坡上滾下。', en: 'A giant orange rolled downhill.' },
-        outcomes: [
-          {
-            id: 'orange-fruit-high-attack',
-            condition: { metric: 'teamAtk', operator: 'gte', value: 260 },
-            text: {
-              zh: '隊伍攻擊力足夠，合力把橘子推回坡道，取得額外果肉。',
-              en: 'The party had enough attack to shove it back and secure extra pulp.',
-            },
-            rewardMultiplier: 1.2,
-          },
-          {
-            id: 'orange-fruit-dodge',
-            text: {
-              zh: '隊伍避開滾落的橘子，雖然安全通過，但錯過部分素材。',
-              en: 'The party dodged the rolling fruit and passed safely, but missed some materials.',
-            },
-            rewardMultiplier: 0.9,
-          },
-        ],
-      },
-    ],
+    summary: { zh: '充滿香氣、藤蔓、巨型橘子與酸味怪物的入門劇本。', en: 'A starter script filled with citrus scent, vines, giant oranges, and sour monsters.' },
+    scriptEvents: [...commonEvents, ...orangeOnlyEvents],
   },
   {
     id: 'apple',
-    asset: {
-      iconKey: 'forest-apple',
-    },
+    asset: { iconKey: 'forest-apple' },
     difficulty: 2,
     durationSeconds: 90,
     reward: 'Jam x1',
     name: { zh: '蘋果森林', en: 'Apple Forest' },
-    summary: { zh: '樹根迷宮較複雜，需要隊伍有足夠攻防。', en: 'A winding root maze that asks for better attack and defense.' },
-    scriptEvents: [
-      {
-        id: 'apple-root-maze',
-        setup: { zh: '隊伍進入樹根迷宮。', en: 'The party entered the root maze.' },
-        outcomes: [
-          {
-            id: 'apple-maze-high-power',
-            condition: { metric: 'teamPower', operator: 'gte', value: 500 },
-            text: {
-              zh: '隊伍總能力超過 500，能快速分工探路，找出最短出口。',
-              en: 'With team power above 500, the party split scouting duties and found the shortest exit.',
-            },
-            rewardMultiplier: 1.2,
-          },
-          {
-            id: 'apple-maze-lost',
-            text: {
-              zh: '隊伍在相似的樹根間迷路，只能沿著刻痕慢慢修正方向。',
-              en: 'The party got lost among similar roots and slowly corrected course using trail marks.',
-            },
-            rewardMultiplier: 0.9,
-          },
-        ],
-      },
-      {
-        id: 'apple-fruit-mist',
-        setup: { zh: '酸甜果霧讓視線和體力一起下降。', en: 'Sweet-tart fruit mist reduced both vision and stamina.' },
-        outcomes: [
-          {
-            id: 'apple-mist-high-hp',
-            condition: { metric: 'teamHp', operator: 'gte', value: 360 },
-            text: {
-              zh: '隊伍生命值充足，輪流開路後仍保有穩定節奏。',
-              en: 'The party had enough HP to rotate leaders and keep a steady pace.',
-            },
-            rewardMultiplier: 1.1,
-          },
-          {
-            id: 'apple-mist-fatigue',
-            text: {
-              zh: '隊伍體力被果霧消耗，被迫多休息一次。',
-              en: 'The mist drained stamina and forced one extra rest.',
-            },
-            rewardMultiplier: 0.9,
-          },
-        ],
-      },
-      {
-        id: 'apple-seed-guardian',
-        setup: { zh: '種子守衛擋住出口。', en: 'A seed guardian blocked the exit.' },
-        outcomes: [
-          {
-            id: 'apple-guardian-ember-leader',
-            condition: { leaderElement: 'ember' },
-            text: {
-              zh: '火焰隊長點燃乾燥落葉製造聲響，成功引開守衛。',
-              en: 'The ember leader lit dry leaves to distract the guardian.',
-            },
-            rewardMultiplier: 1.15,
-            tags: ['leader-element'],
-          },
-          {
-            id: 'apple-guardian-standard',
-            text: {
-              zh: '隊伍以協同攻防突破出口，取得一罐濃厚果醬。',
-              en: 'The party used coordinated attack and defense to break through and earn thick jam.',
-            },
-          },
-        ],
-      },
-    ],
+    summary: { zh: '共通事件外，還有古老蘋果樹落下巨型硬蘋果的耐力考驗。', en: 'Includes the common events plus a stamina test under an ancient tree raining giant hard apples.' },
+    scriptEvents: [...commonEvents, ...appleOnlyEvents],
   },
   {
     id: 'snow-peach',
-    asset: {
-      iconKey: 'forest-snow-peach',
-    },
+    asset: { iconKey: 'forest-snow-peach' },
     difficulty: 3,
     durationSeconds: 150,
     reward: 'Snow Peach x1',
-    name: { zh: '雪蜜桃森林', en: 'Snow Peach Forest' },
-    summary: { zh: '寒霧會消耗生命值，但完成後回報最好。', en: 'Cold mist drains stamina, but the final report is richest.' },
-    scriptEvents: [
-      {
-        id: 'snow-ice-bridge',
-        setup: { zh: '冰霜落在林間，前方出現數座雪橋。', en: 'Fine ice fell through the forest, revealing several snow bridges.' },
-        outcomes: [
-          {
-            id: 'snow-bridge-frost-leader',
-            condition: { leaderElement: 'frost' },
-            text: {
-              zh: '冰霜隊長辨識出不會碎裂的雪橋，隊伍省下大量時間。',
-              en: 'The frost leader identified stable snow bridges and saved the party significant time.',
-            },
-            rewardMultiplier: 1.2,
-            tags: ['leader-element'],
-          },
-          {
-            id: 'snow-bridge-careful',
-            text: {
-              zh: '隊伍逐一測試雪橋，雖然慢了些，但沒有發生意外。',
-              en: 'The party tested each bridge one by one; slower, but safe.',
-            },
-          },
-        ],
-      },
-      {
-        id: 'snow-whiteout',
-        setup: { zh: '寒霧吞沒視線，隊伍開始失去方向感。', en: 'Cold mist swallowed visibility and the party began losing its sense of direction.' },
-        outcomes: [
-          {
-            id: 'snow-whiteout-high-hp',
-            condition: { metric: 'teamHp', operator: 'gte', value: 380 },
-            text: {
-              zh: '隊伍生命值充足，高耐力成員輪流帶路，維持完整隊形。',
-              en: 'With enough HP, high-stamina allies took turns leading and kept formation intact.',
-            },
-            rewardMultiplier: 1.15,
-          },
-          {
-            id: 'snow-whiteout-low-hp',
-            text: {
-              zh: '隊伍被寒霧拖慢，必須消耗更多補給才抵達安全地帶。',
-              en: 'The mist slowed the party and forced extra supplies before reaching safety.',
-            },
-            rewardMultiplier: 0.85,
-          },
-        ],
-      },
-      {
-        id: 'snow-peach-blossom',
-        setup: { zh: '雪蜜桃花在終點短暫盛開。', en: 'Snow-peach blossoms briefly opened at the end.' },
-        outcomes: [
-          {
-            id: 'snow-blossom-high-power',
-            condition: { metric: 'teamPower', operator: 'gte', value: 650 },
-            text: {
-              zh: '隊伍總能力超過 650，成功採集完整花蜜，遠征報告非常豐厚。',
-              en: 'With team power above 650, the party collected full nectar and returned with a rich report.',
-            },
-            rewardMultiplier: 1.35,
-          },
-          {
-            id: 'snow-blossom-normal',
-            text: {
-              zh: '隊伍趕在花朵閉合前採到少量花蜜，仍帶回珍貴成果。',
-              en: 'The party gathered a little nectar before the flowers closed and still returned with rare findings.',
-            },
-          },
-        ],
-      },
-    ],
+    name: { zh: '水蜜桃雪森', en: 'Snow Peach Forest' },
+    summary: { zh: '共通事件外，必經之路被散發寒氣的急凍紅蜜桃封住。', en: 'Includes the common events plus a frozen red peach blocking the required path with intense cold.' },
+    scriptEvents: [...commonEvents, ...snowPeachOnlyEvents],
   },
 ]
 
 export const gameStoryChapters: GameStoryChapter[] = [
   {
     id: 'starter-gift',
-    title: { zh: '測試階段贈送水豚', en: 'Testing Starter Gift' },
+    title: { zh: '測試起始隊伍', en: 'Testing Starter Team' },
     description: {
-      zh: '目前測試階段每次登入都視為新用戶，贈送原先四隻水豚。未來正式上鏈後，會改由錢包是否曾登入遊戲與鏈上領取紀錄判斷。',
-      en: 'During testing, every login is treated as a new user and receives the four starter capybaras. On-chain mode will use wallet and claim records instead.',
+      zh: '測試模式會發放 sakiko、MAX、SONORATO、CANESAN 四隻水豚。技能與數值目前用於前端顯示與劇本判定，不執行實際戰鬥或扣血。',
+      en: 'Testing mode grants sakiko, MAX, SONORATO, and CANESAN. Skills and stats are currently used for frontend display and script checks, not real combat or HP mutation.',
     },
     beats: [
       {
         id: 'gift-wallet-login',
-        setup: {
-          zh: '玩家連接 MetaMask。',
-          en: 'The player connects MetaMask.',
-        },
-        outcomes: [{
-          id: 'gift-wallet-login-success',
-          text: {
-          zh: '玩家連接 MetaMask 後取得錢包地址。',
-          en: 'The player connects MetaMask and receives a wallet address.',
+        setup: { zh: '玩家連接 MetaMask。', en: 'The player connects MetaMask.' },
+        outcomes: [
+          {
+            id: 'gift-wallet-login-success',
+            text: { zh: '玩家取得錢包地址並進入測試流程。', en: 'The player receives a wallet address and enters the testing flow.' },
           },
-        }],
-      },
-      {
-        id: 'gift-local-starters',
-        setup: {
-          zh: '測試模式確認錢包地址。',
-          en: 'Testing mode confirms the wallet address.',
-        },
-        outcomes: [{
-          id: 'gift-local-starters-success',
-          text: {
-          zh: '測試模式建立四隻本地水豚，用於驗證升級與遠征流程。',
-          en: 'Testing mode creates four local capybaras to verify leveling and expedition flows.',
-          },
-        }],
+        ],
       },
     ],
   },

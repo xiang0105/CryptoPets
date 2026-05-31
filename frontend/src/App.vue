@@ -5,7 +5,7 @@ import MarkdownIt from 'markdown-it'
 import { currentMessages, locale, toggleLocale } from './i18n'
 import { useGameApi } from '@/composables/useGameApi'
 import { useWallet } from '@/composables/useWallet'
-import { createStarterPets, replacePets } from '@/data/pets'
+import { createStarterPets, pets, replacePets } from '@/data/pets'
 import { setExpeditionTeam } from '@/state/expeditionTeam'
 import { resetTestProgress } from '@/state/testProgress'
 import { capybaraImageBySlug } from '@/content/gameAssets'
@@ -52,6 +52,7 @@ const markdown = new MarkdownIt({
   linkify: true,
   typographer: true,
 })
+const frontendOnlyAuth = import.meta.env.VITE_FRONTEND_ONLY_AUTH !== 'false'
 
 const renderedReadme = computed(() => markdown.render(currentMessages.value.app.help.markdown))
 
@@ -151,14 +152,22 @@ async function startLoginFlow() {
   }
 }
 
-function confirmLogin() {
+async function confirmLogin() {
   if (!canConfirmLogin.value) {
     return
   }
 
   isLoginConfirmed.value = true
-  grantTestingStarterPets()
-  void loadAllApiData()
+  resetTestProgress()
+
+  if (frontendOnlyAuth) {
+    grantTestingStarterPets()
+  } else {
+    await loadAllApiData()
+    setExpeditionTeam(pets.map((pet) => pet.id))
+    isStarterGiftOpen.value = pets.length > 0
+  }
+
   void playBackgroundMusic()
 }
 
@@ -178,7 +187,6 @@ function closeStarterGift() {
 onMounted(async () => {
   await restoreSession()
   void startLoginFlow()
-  void loadAllApiData()
   void playBackgroundMusic()
 })
 

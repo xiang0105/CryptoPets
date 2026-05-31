@@ -36,10 +36,12 @@ export interface PlayerProfile {
 }
 
 export type ExpeditionStatus = 'started' | 'claimed' | 'cancelled'
+export type ExpeditionType = 'orange' | 'apple' | 'snow-peach'
 
 export interface ExpeditionSummary {
   id: string
   petIds: string[]
+  expeditionType: ExpeditionType
   startedAt: string
   endsAt: string
   status: ExpeditionStatus

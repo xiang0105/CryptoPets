@@ -4,7 +4,7 @@ import { pets, type Pet } from '@/data/pets'
 import { useGameApi } from '@/composables/useGameApi'
 import { expeditionTeamPets } from '@/state/expeditionTeam'
 import { grantSkillPoints } from '@/state/testProgress'
-import { petImages, yuzuBiteFrames } from '@/content/gameAssets'
+import { getPetImage, yuzuBiteFrames } from '@/content/gameAssets'
 import orangeMap from '@game-content/assets/maps/orange.png'
 import { currentMessages, isZh } from '@/i18n'
 import {
@@ -26,6 +26,7 @@ const {
   operationLoading,
   queryError,
   queryLoading,
+  activeExpedition: apiActiveExpedition,
   loadPlayerProfile,
   claimActiveExpedition,
   startTeamExpedition,
@@ -258,8 +259,17 @@ function storyConditionMatches(condition?: StoryCondition) {
   }
 
   const leader = currentExpeditionTeam()[0]
+  const team = currentExpeditionTeam()
 
   if (condition.leaderElement && leader?.element !== condition.leaderElement) {
+    return false
+  }
+
+  if (condition.teamPetName && !team.some((pet) => pet.name === condition.teamPetName)) {
+    return false
+  }
+
+  if (typeof condition.chancePercent === 'number' && Math.random() * 100 >= condition.chancePercent) {
     return false
   }
 
@@ -340,6 +350,39 @@ async function retryStartExpedition() {
   await startExpedition(lastSelectedForest.value)
 }
 
+async function syncActiveExpeditionFromApi() {
+  try {
+    await loadPlayerProfile()
+  } catch {
+    return
+  }
+
+  const summary = apiActiveExpedition.value
+
+  if (!summary || activeExpedition.value) {
+    return
+  }
+
+  const forest = forestOptions.find((entry) => entry.id === summary.expeditionType)
+
+  if (!forest) {
+    return
+  }
+
+  const startedAt = new Date(summary.startedAt).getTime()
+  const finishAt = new Date(summary.endsAt).getTime()
+
+  activeExpedition.value = {
+    id: forest.id,
+    apiId: summary.id,
+    startedAt,
+    finishAt,
+    logs: buildExpeditionLogs(forest, startedAt),
+  }
+  saveStoredExpedition(activeExpedition.value)
+  now.value = Date.now()
+}
+
 async function completeExpedition() {
   if (!activeExpedition.value || !isExpeditionComplete.value || !selectedForest.value) {
     return
@@ -370,7 +413,7 @@ function syncCompletedExpedition() {
 }
 
 onMounted(() => {
-  void loadPlayerProfile()
+  void syncActiveExpeditionFromApi()
   syncCompletedExpedition()
   scrollLogToLatest()
   fruitCycleStarted = performance.now()
@@ -462,7 +505,7 @@ onUnmounted(() => {
               <img
                 class="scene-pet-avatar"
                 :class="pet.element"
-                :src="petImages[pet.id]"
+                :src="getPetImage(pet)"
                 :alt="`${pet.name} capybara`"
                 draggable="false"
               />
@@ -541,7 +584,7 @@ onUnmounted(() => {
 
           <div class="pet-body">
             <div class="portrait">
-              <img :src="petImages[pet.id]" :alt="`${pet.name} portrait`" draggable="false" />
+              <img :src="getPetImage(pet)" :alt="`${pet.name} portrait`" draggable="false" />
             </div>
 
             <div class="meter-block">
@@ -1460,7 +1503,7 @@ onUnmounted(() => {
 
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px 10px;
   padding: 0 8px 8px;
   margin: 0;
@@ -1479,6 +1522,15 @@ onUnmounted(() => {
   margin: 0;
   font-size: 13px;
   font-weight: 900;
+}
+
+.stat-grid div:nth-child(4) {
+  grid-column: 1 / -1;
+}
+
+.stat-grid div:nth-child(4) dd {
+  overflow-wrap: anywhere;
+  text-align: right;
 }
 
 .pet-card.is-ember {
