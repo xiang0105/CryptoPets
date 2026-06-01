@@ -201,7 +201,7 @@ function syncLocalPetsFromApi() {
 
 async function retryPlayerProfile() {
   try {
-    await loadPlayerProfile()
+    await loadPlayerProfile({ force: true })
   } catch {
     // Error text is rendered from queryError.player.
   } finally {
@@ -211,7 +211,7 @@ async function retryPlayerProfile() {
 
 onMounted(() => {
   syncLocalPetsFromApi()
-  void retryPlayerProfile()
+  void loadPlayerProfile().catch(() => undefined).finally(syncLocalPetsFromApi)
   void loadFriends()
 })
 </script>

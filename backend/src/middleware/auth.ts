@@ -39,6 +39,6 @@ export function requireAuth(request: Request, _response: Response, next: NextFun
     }
     next()
   } catch {
-    next(new HttpError(401, 'INVALID_TOKEN'))
+    next(new HttpError(401, 'INVALID_AUTH_TOKEN'))
   }
 }
