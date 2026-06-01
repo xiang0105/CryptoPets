@@ -44,11 +44,11 @@
   - 驗收：前端呼叫 `/auth/nonce`，再用 `personal_sign` 簽 message，最後呼叫 `/auth/login`。
 - [x] 建立 session restore。
   - 驗收：localStorage 有 token 時呼叫 `/player` 還原登入狀態。
-- [ ] 補齊錢包切換帳號處理。
+- [x] 補齊錢包切換帳號處理。
   - 驗收：MetaMask account changed 時清除舊狀態並要求重新登入。
-- [ ] 補齊斷線與無錢包插件提示。
+- [x] 補齊斷線與無錢包插件提示。
   - 驗收：無 MetaMask、拒絕簽名、登入失敗都有清楚提示。
-- [ ] 補齊錯鏈提示。
+- [x] 補齊錯鏈提示。
   - 驗收：後端或錢包回報 chain id 不符時，前端顯示不可操作原因。
 
 ## 全域資料狀態
@@ -61,9 +61,9 @@
   - 驗收：遠征、市場、好友 mutation 有 loading 與 error。
 - [x] 登入後載入全量 API 資料。
   - 驗收：確認登入後呼叫 player/resources/backpack/friends/market/transactions。
-- [ ] 建立全域錯誤碼轉譯。
+- [x] 建立全域錯誤碼轉譯。
   - 驗收：後端錯誤碼如 `AUTH_REQUIRED`、`EXPEDITION_ALREADY_ACTIVE` 可顯示使用者可讀文字。
-- [ ] 補齊重新整理策略。
+- [x] 補齊重新整理策略。
   - 驗收：切頁或操作後只刷新必要 API，避免重複請求。
 
 ## 遠征頁 Home
@@ -82,9 +82,9 @@
   - 驗收：nonce/login/player/backpack/start/wait/claim/backpack/transactions 全流程已驗證。
 - [x] 遠征 TASK 完成後才打勾。
   - 驗收：DB migration 套用且 E2E 通過後，才將本項標記完成。
-- [ ] 補齊遠征錯誤訊息轉譯。
+- [x] 補齊遠征錯誤訊息轉譯。
   - 驗收：未登入、已有遠征、寵物不屬於玩家、未完成領獎等錯誤有清楚提示。
-- [ ] 補齊遠征 smoke/component tests。
+- [x] 補齊遠征 smoke/component tests。
   - 驗收：測試開始、進度、領獎、錯誤狀態。
 
 ## 寵物頁 Pets
@@ -103,7 +103,7 @@
   - 驗收：突破按鈕只顯示「後端接口未開放」，不改 pet stage/stats。
 - [ ] 串接後端寵物升級 API。
   - 驗收：有正式 API 後，技能升級與突破由後端判定並回傳新狀態。
-- [ ] 補齊 Pets 頁 component tests。
+- [x] 補齊 Pets 頁 component tests。
   - 驗收：測試 loading、error、empty、chain disabled、team selection。
 
 ## 背包頁 Inventory
@@ -118,7 +118,7 @@
   - 驗收：背包 API 載入中、失敗、重試都有 UI。
 - [ ] 補齊素材操作 API。
   - 驗收：使用、丟棄、全部出售等功能有後端接口後才開啟。
-- [ ] 補齊 Inventory component tests。
+- [x] 補齊 Inventory component tests。
   - 驗收：測試素材列表、空狀態、錯誤、chain disabled。
 
 ## 商店頁 Store
@@ -161,7 +161,7 @@
   - 驗收：說明角色是後端載入，而不是前端測試發放。
 - [x] 更新 frontend README。
   - 驗收：README 描述資料來源為後端 API。
-- [ ] 整理中文亂碼文字。
+- [x] 整理中文亂碼文字。
   - 驗收：頁面與文件中的中文 copy 都是正常 UTF-8 可讀文字。
 
 ## 測試與品質

@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { materialDefinitions } from '@cryptopets/game-content'
 import type { GoodieSft } from '@/data/goodies'
@@ -156,7 +156,7 @@ function openInventoryModal() {
   listingPrice.value = selectedInventoryGoodie.value?.price ?? 100
   listingAmount.value = Math.min(listingAmount.value, maxListingAmount.value)
   isInventoryModalOpen.value = true
-  void loadMaterialBackpack()
+  void loadMaterialBackpack({ force: true })
 }
 
 function closeInventoryModal() {
@@ -241,9 +241,17 @@ function goShelfArea(direction: -1 | 1) {
 }
 
 function retryMarketData() {
-  void loadPlayerProfile()
-  void loadMarketListings()
-  void loadTransactions()
+  void loadPlayerProfile({ force: true })
+  void loadMarketListings({ force: true })
+  void loadTransactions({ force: true })
+}
+
+function retryTransactions() {
+  void loadTransactions({ force: true })
+}
+
+function retryBackpack() {
+  void loadMaterialBackpack({ force: true })
 }
 
 onMounted(() => {
@@ -430,7 +438,7 @@ onMounted(() => {
               <p v-if="isTransactionsLoading" class="store-notice">{{ isZh ? '載入交易中...' : 'Loading transactions...' }}</p>
               <p v-else-if="transactionsError" class="store-notice">
                 {{ transactionsError }}
-                <button type="button" @click="loadTransactions">{{ isZh ? '重試' : 'Retry' }}</button>
+                <button type="button" @click="retryTransactions">{{ isZh ? '重試' : 'Retry' }}</button>
               </p>
               <p v-else-if="transactions.length === 0" class="store-notice">
                 {{ isZh ? '尚無交易紀錄' : 'No transactions yet' }}
@@ -481,11 +489,11 @@ onMounted(() => {
               <template v-else-if="backpackError">
                 <strong>{{ storeCopy.backpackLoadFailed }}</strong>
                 <span>{{ backpackError }}</span>
-                <button type="button" @click="loadMaterialBackpack">{{ storeCopy.retry }}</button>
+                <button type="button" @click="retryBackpack">{{ storeCopy.retry }}</button>
               </template>
               <template v-else>
                 <strong>{{ storeCopy.backpackEmpty }}</strong>
-                <button type="button" @click="loadMaterialBackpack">{{ storeCopy.refresh }}</button>
+                <button type="button" @click="retryBackpack">{{ storeCopy.refresh }}</button>
               </template>
             </div>
             <button

@@ -23,7 +23,7 @@
   - 驗收：登入成功回傳 token，token payload 包含 user id 與 wallet，issuer/audience 固定。
 - [x] 建立 JWT auth middleware。
   - 驗收：受保護 API 無 token 回 `AUTH_REQUIRED`，無效 token 回 `INVALID_AUTH_TOKEN`。
-- [ ] 補齊登入驗證 integration tests。
+- [x] 補齊登入驗證 integration tests。
   - 驗收：涵蓋 nonce 建立、成功登入、錯誤簽名、過期 nonce、重複使用 nonce。
 
 ## 玩家與寵物資料

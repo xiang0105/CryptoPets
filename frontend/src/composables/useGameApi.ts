@@ -28,11 +28,16 @@ import type { GoodieSft, ListingStatus } from '@/data/goodies'
 import type { Pet } from '@/data/pets'
 import { replacePets } from '@/data/pets'
 import { getAuthToken } from '@/api/client'
+import { translateApiError } from '@/api/errors'
 
 type QueryKey = 'player' | 'resources' | 'backpack' | 'friends' | 'marketListings' | 'transactions'
 type OperationKey = 'startExpedition' | 'claimReward' | 'addFriend' | 'listMarketMaterial' | 'cancelListing' | 'buyListing'
+type QueryOptions = {
+  force?: boolean
+}
 
 const materialDefinitionById = new Map(materialDefinitions.map((material) => [material.id, material]))
+const QUERY_FRESH_MS = 30_000
 
 const playerProfile = ref<PlayerProfile | null>(null)
 const resources = ref<PlayerResources | null>(null)
@@ -59,6 +64,15 @@ const queryError = reactive<Record<QueryKey, string>>({
   marketListings: '',
   transactions: '',
 })
+const queryLoadedAt = reactive<Record<QueryKey, number>>({
+  player: 0,
+  resources: 0,
+  backpack: 0,
+  friends: 0,
+  marketListings: 0,
+  transactions: 0,
+})
+const queryInFlight: Partial<Record<QueryKey, Promise<unknown>>> = {}
 
 const operationLoading = reactive<Record<OperationKey, boolean>>({
   startExpedition: false,
@@ -110,23 +124,41 @@ const hasLoadedAnyApi = computed(() =>
   ),
 )
 
-function errorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback
+function isQueryFresh(key: QueryKey) {
+  return Date.now() - queryLoadedAt[key] < QUERY_FRESH_MS
 }
 
-async function runQuery<T>(key: QueryKey, request: () => Promise<T>, apply: (value: T) => void, fallback: string) {
+function shouldSkipQuery(key: QueryKey, options: QueryOptions, hasValue: boolean) {
+  return !options.force && hasValue && isQueryFresh(key)
+}
+
+async function runQuery<T>(key: QueryKey, request: () => Promise<T>, apply: (value: T) => void, fallback: string, options: QueryOptions = {}) {
+  if (!options.force && queryInFlight[key]) {
+    return queryInFlight[key] as Promise<T>
+  }
+
   queryLoading[key] = true
   queryError[key] = ''
 
-  try {
+  const queryPromise = (async () => {
     const value = await request()
     apply(value)
+    queryLoadedAt[key] = Date.now()
     return value
+  })()
+
+  queryInFlight[key] = queryPromise
+
+  try {
+    return await queryPromise
   } catch (error) {
-    queryError[key] = errorMessage(error, fallback)
+    queryError[key] = translateApiError(error, fallback)
     throw error
   } finally {
-    queryLoading[key] = false
+    if (queryInFlight[key] === queryPromise) {
+      delete queryInFlight[key]
+    }
+    queryLoading[key] = Boolean(queryInFlight[key])
   }
 }
 
@@ -137,7 +169,7 @@ async function runOperation<T>(key: OperationKey, request: () => Promise<T>, fal
   try {
     return await request()
   } catch (error) {
-    operationError[key] = errorMessage(error, fallback)
+    operationError[key] = translateApiError(error, fallback)
     throw error
   } finally {
     operationLoading[key] = false
@@ -206,14 +238,15 @@ function shouldUseProtectedApi() {
   return Boolean(getAuthToken())
 }
 
-function requireProtectedApi() {
+async function loadPlayerProfile(options: QueryOptions = {}) {
   if (!shouldUseProtectedApi()) {
+    queryError.player = translateApiError(new Error('AUTH_REQUIRED'), 'Player profile load failed')
     throw new Error('AUTH_REQUIRED')
   }
-}
 
-async function loadPlayerProfile() {
-  requireProtectedApi()
+  if (shouldSkipQuery('player', options, Boolean(playerProfile.value))) {
+    return playerProfile.value
+  }
 
   return runQuery(
     'player',
@@ -224,19 +257,34 @@ async function loadPlayerProfile() {
       replacePets(profile.pets.map(mapPlayerPet))
     },
     'Player profile load failed',
+    options,
   )
 }
 
-async function loadResources() {
-  requireProtectedApi()
+async function loadResources(options: QueryOptions = {}) {
+  if (!shouldUseProtectedApi()) {
+    queryError.resources = translateApiError(new Error('AUTH_REQUIRED'), 'Resources load failed')
+    throw new Error('AUTH_REQUIRED')
+  }
+
+  if (shouldSkipQuery('resources', options, Boolean(resources.value))) {
+    return resources.value
+  }
 
   return runQuery('resources', getResources, (nextResources) => {
     resources.value = nextResources
-  }, 'Resources load failed')
+  }, 'Resources load failed', options)
 }
 
-async function loadMaterialBackpack() {
-  requireProtectedApi()
+async function loadMaterialBackpack(options: QueryOptions = {}) {
+  if (!shouldUseProtectedApi()) {
+    queryError.backpack = translateApiError(new Error('AUTH_REQUIRED'), 'Backpack load failed')
+    throw new Error('AUTH_REQUIRED')
+  }
+
+  if (shouldSkipQuery('backpack', options, Boolean(materialBackpack.value))) {
+    return materialBackpack.value
+  }
 
   return runQuery('backpack', getMaterialBackpack, (nextBackpack) => {
     materialBackpack.value = nextBackpack
@@ -244,47 +292,68 @@ async function loadMaterialBackpack() {
       coins: nextBackpack.coins,
       inventory: nextBackpack.inventory,
     }
-  }, 'Backpack load failed')
+  }, 'Backpack load failed', options)
 }
 
-async function loadFriends() {
-  requireProtectedApi()
+async function loadFriends(options: QueryOptions = {}) {
+  if (!shouldUseProtectedApi()) {
+    queryError.friends = translateApiError(new Error('AUTH_REQUIRED'), 'Friends load failed')
+    throw new Error('AUTH_REQUIRED')
+  }
+
+  if (shouldSkipQuery('friends', options, friends.value.length > 0)) {
+    return friends.value
+  }
 
   return runQuery('friends', getFriends, (nextFriends) => {
     friends.value = nextFriends
-  }, 'Friends load failed')
+  }, 'Friends load failed', options)
 }
 
-async function loadMarketListings() {
-  requireProtectedApi()
+async function loadMarketListings(options: QueryOptions = {}) {
+  if (!shouldUseProtectedApi()) {
+    queryError.marketListings = translateApiError(new Error('AUTH_REQUIRED'), 'Market listings load failed')
+    throw new Error('AUTH_REQUIRED')
+  }
+
+  if (shouldSkipQuery('marketListings', options, marketListings.value.length > 0)) {
+    return marketListings.value
+  }
 
   return runQuery('marketListings', getMarketListings, (nextListings) => {
     marketListings.value = nextListings
-  }, 'Market listings load failed')
+  }, 'Market listings load failed', options)
 }
 
-async function loadTransactions() {
-  requireProtectedApi()
+async function loadTransactions(options: QueryOptions = {}) {
+  if (!shouldUseProtectedApi()) {
+    queryError.transactions = translateApiError(new Error('AUTH_REQUIRED'), 'Transactions load failed')
+    throw new Error('AUTH_REQUIRED')
+  }
+
+  if (shouldSkipQuery('transactions', options, transactions.value.length > 0)) {
+    return transactions.value
+  }
 
   return runQuery('transactions', getTransactions, (nextTransactions) => {
     transactions.value = nextTransactions
-  }, 'Transactions load failed')
+  }, 'Transactions load failed', options)
 }
 
-async function loadAllApiData() {
+async function loadAllApiData(options: QueryOptions = {}) {
   await Promise.allSettled([
-    loadPlayerProfile(),
-    loadResources(),
-    loadMaterialBackpack(),
-    loadFriends(),
-    loadMarketListings(),
-    loadTransactions(),
+    loadPlayerProfile(options),
+    loadResources(options),
+    loadMaterialBackpack(options),
+    loadFriends(options),
+    loadMarketListings(options),
+    loadTransactions(options),
   ])
 }
 
 async function startTeamExpedition(petIds: string[], expeditionType: ExpeditionType) {
   if (!shouldUseProtectedApi()) {
-    operationError.startExpedition = 'AUTH_REQUIRED'
+    operationError.startExpedition = translateApiError(new Error('AUTH_REQUIRED'), 'Expedition start failed')
     throw new Error('AUTH_REQUIRED')
   }
 
@@ -295,13 +364,13 @@ async function startTeamExpedition(petIds: string[], expeditionType: ExpeditionT
   )
 
   activeExpedition.value = summary
-  await loadPlayerProfile().catch(() => undefined)
+  await loadPlayerProfile({ force: true }).catch(() => undefined)
   return summary
 }
 
 async function claimActiveExpedition(expeditionId: string) {
   if (!shouldUseProtectedApi()) {
-    operationError.claimReward = 'AUTH_REQUIRED'
+    operationError.claimReward = translateApiError(new Error('AUTH_REQUIRED'), 'Reward claim failed')
     throw new Error('AUTH_REQUIRED')
   }
 
@@ -312,13 +381,18 @@ async function claimActiveExpedition(expeditionId: string) {
   )
 
   activeExpedition.value = summary.status === 'claimed' ? null : summary
-  await Promise.allSettled([loadResources(), loadMaterialBackpack(), loadTransactions(), loadPlayerProfile()])
+  await Promise.allSettled([
+    loadResources({ force: true }),
+    loadMaterialBackpack({ force: true }),
+    loadTransactions({ force: true }),
+    loadPlayerProfile({ force: true }),
+  ])
   return summary
 }
 
 async function requestAddFriend(wallet: string) {
   const result = await runOperation('addFriend', () => addFriend(wallet), 'Friend request failed')
-  await loadFriends().catch(() => undefined)
+  await loadFriends({ force: true }).catch(() => undefined)
   return result
 }
 
@@ -328,19 +402,34 @@ async function requestListMarketMaterial(materialId: string, amount: number, pri
     () => listMarketMaterial(materialId, amount, price),
     'Listing creation failed',
   )
-  await Promise.allSettled([loadMarketListings(), loadTransactions(), loadResources(), loadMaterialBackpack()])
+  await Promise.allSettled([
+    loadMarketListings({ force: true }),
+    loadTransactions({ force: true }),
+    loadResources({ force: true }),
+    loadMaterialBackpack({ force: true }),
+  ])
   return listing
 }
 
 async function requestCancelListing(listingId: string) {
   const listing = await runOperation('cancelListing', () => cancelMarketListing(listingId), 'Listing cancellation failed')
-  await Promise.allSettled([loadMarketListings(), loadTransactions(), loadResources(), loadMaterialBackpack()])
+  await Promise.allSettled([
+    loadMarketListings({ force: true }),
+    loadTransactions({ force: true }),
+    loadResources({ force: true }),
+    loadMaterialBackpack({ force: true }),
+  ])
   return listing
 }
 
 async function requestBuyListing(listingId: string) {
   const listing = await runOperation('buyListing', () => buyMarketListing(listingId), 'Listing purchase failed')
-  await Promise.allSettled([loadMarketListings(), loadTransactions(), loadResources(), loadMaterialBackpack()])
+  await Promise.allSettled([
+    loadMarketListings({ force: true }),
+    loadTransactions({ force: true }),
+    loadResources({ force: true }),
+    loadMaterialBackpack({ force: true }),
+  ])
   return listing
 }
 

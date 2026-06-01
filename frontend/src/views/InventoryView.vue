@@ -121,7 +121,7 @@ function goShelfPage(direction: -1 | 1) {
 
 async function loadBackpack() {
   try {
-    await loadMaterialBackpack()
+    await loadMaterialBackpack({ force: true })
     selectedSlot.value = materialSlots.value.length > 0 ? 0 : 0
     actionAmount.value = 1
     shelfPage.value = 0
@@ -153,7 +153,7 @@ watch(selectedMaterial, () => {
 })
 
 onMounted(() => {
-  void loadBackpack()
+  void loadMaterialBackpack().catch(() => undefined)
   void loadResources()
 })
 

@@ -8,7 +8,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
-    "type-check": "tsc -p tsconfig.json --noEmit"
+    "type-check": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@cryptopets/game-content": "file:../game-content",
@@ -30,7 +31,8 @@
     "@types/morgan": "^1.9.9",
     "@types/node": "^24.12.2",
     "tsx": "^4.19.2",
-    "typescript": "~6.0.0"
+    "typescript": "~6.0.0",
+    "vitest": "^4.1.7"
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
