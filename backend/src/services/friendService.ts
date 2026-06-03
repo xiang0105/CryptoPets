@@ -5,7 +5,7 @@ import { HttpError } from '../utils/httpError.js'
 
 const addFriendSchema: z.ZodType<AddFriendRequest> = z.object({
   wallet: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
-})
+}).strict()
 
 export async function addFriend(userId: string, input: unknown) {
   const body = addFriendSchema.parse(input)

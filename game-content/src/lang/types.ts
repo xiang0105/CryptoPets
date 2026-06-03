@@ -81,7 +81,7 @@ export interface StoreMessages {
   bought: string
   sold: string
   listed: string
-  coins: string
+  sepolia: string
   remove: string
   removeTitle: string
   removeBody: string
@@ -94,7 +94,7 @@ export interface StoreMessages {
 
 export interface InventoryMessages {
   title: string
-  coins: string
+  sepolia: string
   gridLabel: string
   emptySlot: string
   loading: string

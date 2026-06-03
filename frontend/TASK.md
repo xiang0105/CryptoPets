@@ -109,7 +109,7 @@
 ## 背包頁 Inventory
 
 - [x] 串接 `GET /materials/backpack`。
-  - 驗收：素材列表、coins、source、syncedAt、chain meta 都從後端取得。
+  - 驗收：素材列表、source、syncedAt、chain meta 都從後端取得；素材不顯示固定價值。
 - [x] 顯示素材空狀態。
   - 驗收：後端回空 inventory 時顯示空背包，而不是前端補假素材。
 - [x] 顯示鏈上素材不可用狀態。
@@ -137,9 +137,9 @@
   - 驗收：不再使用前端本地 transactionHistory 假紀錄。
 - [x] 移除被 `v-if=false` 隱藏的測試 UI。
   - 驗收：商店 modal 不保留重複的測試區塊或重複按鈕。
-- [ ] 補齊市場錯誤訊息轉譯。
-  - 驗收：素材不足、金幣不足、不可買自己 listing、listing 已不存在都有清楚提示。
-- [ ] 補齊 Store component tests。
+- [x] 補齊市場錯誤訊息轉譯。
+  - 驗收：素材不足、測試階段 Sepolia 不轉帳、不可買自己 listing、listing 已不存在都有清楚提示。
+- [x] 補齊 Store component tests。
   - 驗收：測試 listing、buy、list、cancel、empty、error。
 
 ## 鏈上資料狀態
@@ -152,6 +152,10 @@
   - 驗收：素材餘額由 `MaterialBackpack` 回傳決定。
 - [ ] 接入正式鏈上同步狀態 UI。
   - 驗收：顯示同步中、最後同步時間、鏈上延遲、資料不可用原因。
+- [ ] 接入正式 Sepolia 交易狀態 UI。
+  - 驗收：正式轉帳合約與後端 API 完成後，顯示交易送出、等待確認、成功、失敗與取消狀態；測試階段不得發起實際轉帳。
+- [ ] 顯示合約地址與鏈資訊。
+  - 驗收：前端以後端回傳與公開 env 顯示 Pet、Material、交易合約地址與 chain id，缺少合約時顯示不可用狀態。
 
 ## 文字與文件
 

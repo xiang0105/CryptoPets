@@ -80,7 +80,7 @@ export const en: GameMessages = {
     bought: 'Bought',
     sold: 'Sold',
     listed: 'Listed',
-    coins: 'Coins',
+    sepolia: 'Sepolia',
     remove: 'Remove',
     removeTitle: 'Remove listing?',
     removeBody: 'This item will be removed from your active listings.',
@@ -92,7 +92,7 @@ export const en: GameMessages = {
   },
   inventory: {
     title: "CAPY'S INVENTORY & MATERIALS",
-    coins: 'Coins',
+    sepolia: 'Sepolia',
     gridLabel: 'Material backpack grid',
     emptySlot: 'Empty material slot',
     loading: 'Loading materials...',
@@ -106,7 +106,7 @@ export const en: GameMessages = {
     emptyDescription:
       'Materials will appear here after the backend enables on-chain user material lookup. Testing currently keeps every slot empty.',
     stackLimit: 'Stack Limit:',
-    value: 'Value:',
+    value: 'Trade:',
     origin: 'Origin:',
     chainReserved: 'Reserved for on-chain material data',
     discard: 'Discard',

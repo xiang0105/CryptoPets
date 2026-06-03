@@ -13,7 +13,7 @@ const loginSchema = z.object({
   nonce: z.string().uuid(),
   message: z.string().min(1).max(1000),
   signature: z.string().regex(/^0x[a-fA-F0-9]+$/),
-})
+}).strict()
 
 const NONCE_TTL_MS = 5 * 60 * 1000
 

@@ -1,6 +1,7 @@
 import { computed, reactive, ref } from 'vue'
 import type {
   ExpeditionSummary,
+  ExpeditionLogEntry,
   ExpeditionType,
   FriendSummary,
   MaterialBackpack,
@@ -15,6 +16,7 @@ import {
   buyMarketListing,
   cancelMarketListing,
   claimReward,
+  getExpeditionLogs,
   getFriends,
   getMarketListings,
   getMaterialBackpack,
@@ -30,7 +32,7 @@ import { replacePets } from '@/data/pets'
 import { getAuthToken } from '@/api/client'
 import { translateApiError } from '@/api/errors'
 
-type QueryKey = 'player' | 'resources' | 'backpack' | 'friends' | 'marketListings' | 'transactions'
+type QueryKey = 'player' | 'resources' | 'backpack' | 'friends' | 'marketListings' | 'transactions' | 'expeditionLogs'
 type OperationKey = 'startExpedition' | 'claimReward' | 'addFriend' | 'listMarketMaterial' | 'cancelListing' | 'buyListing'
 type QueryOptions = {
   force?: boolean
@@ -46,6 +48,7 @@ const friends = ref<FriendSummary[]>([])
 const marketListings = ref<MarketListing[]>([])
 const transactions = ref<PlayerTransaction[]>([])
 const activeExpedition = ref<ExpeditionSummary | null>(null)
+const expeditionLogs = ref<ExpeditionLogEntry[]>([])
 
 const queryLoading = reactive<Record<QueryKey, boolean>>({
   player: false,
@@ -54,6 +57,7 @@ const queryLoading = reactive<Record<QueryKey, boolean>>({
   friends: false,
   marketListings: false,
   transactions: false,
+  expeditionLogs: false,
 })
 
 const queryError = reactive<Record<QueryKey, string>>({
@@ -63,6 +67,7 @@ const queryError = reactive<Record<QueryKey, string>>({
   friends: '',
   marketListings: '',
   transactions: '',
+  expeditionLogs: '',
 })
 const queryLoadedAt = reactive<Record<QueryKey, number>>({
   player: 0,
@@ -71,6 +76,7 @@ const queryLoadedAt = reactive<Record<QueryKey, number>>({
   friends: 0,
   marketListings: 0,
   transactions: 0,
+  expeditionLogs: 0,
 })
 const queryInFlight: Partial<Record<QueryKey, Promise<unknown>>> = {}
 
@@ -229,7 +235,7 @@ function materialInventoryItemToGoodie(materialId: string, amount: number): Good
     grade: definition?.grade ?? 'D',
     amount,
     description: definition?.description ?? materialId,
-    price: definition?.basePrice ?? 1,
+    price: 0,
     status: 'active',
   }
 }
@@ -289,7 +295,7 @@ async function loadMaterialBackpack(options: QueryOptions = {}) {
   return runQuery('backpack', getMaterialBackpack, (nextBackpack) => {
     materialBackpack.value = nextBackpack
     resources.value = {
-      coins: nextBackpack.coins,
+      sepoliaBalance: nextBackpack.sepoliaBalance,
       inventory: nextBackpack.inventory,
     }
   }, 'Backpack load failed', options)
@@ -340,6 +346,21 @@ async function loadTransactions(options: QueryOptions = {}) {
   }, 'Transactions load failed', options)
 }
 
+async function loadExpeditionLogs(options: QueryOptions = {}) {
+  if (!shouldUseProtectedApi()) {
+    queryError.expeditionLogs = translateApiError(new Error('AUTH_REQUIRED'), 'Expedition logs load failed')
+    throw new Error('AUTH_REQUIRED')
+  }
+
+  if (shouldSkipQuery('expeditionLogs', options, expeditionLogs.value.length > 0)) {
+    return expeditionLogs.value
+  }
+
+  return runQuery('expeditionLogs', getExpeditionLogs, (nextLogs) => {
+    expeditionLogs.value = nextLogs
+  }, 'Expedition logs load failed', options)
+}
+
 async function loadAllApiData(options: QueryOptions = {}) {
   await Promise.allSettled([
     loadPlayerProfile(options),
@@ -348,6 +369,7 @@ async function loadAllApiData(options: QueryOptions = {}) {
     loadFriends(options),
     loadMarketListings(options),
     loadTransactions(options),
+    loadExpeditionLogs(options),
   ])
 }
 
@@ -364,7 +386,10 @@ async function startTeamExpedition(petIds: string[], expeditionType: ExpeditionT
   )
 
   activeExpedition.value = summary
-  await loadPlayerProfile({ force: true }).catch(() => undefined)
+  await Promise.allSettled([
+    loadPlayerProfile({ force: true }),
+    loadExpeditionLogs({ force: true }),
+  ])
   return summary
 }
 
@@ -386,6 +411,7 @@ async function claimActiveExpedition(expeditionId: string) {
     loadMaterialBackpack({ force: true }),
     loadTransactions({ force: true }),
     loadPlayerProfile({ force: true }),
+    loadExpeditionLogs({ force: true }),
   ])
   return summary
 }
@@ -437,6 +463,7 @@ export function useGameApi() {
   return {
     activeExpedition,
     activeMarketGoodies,
+    expeditionLogs,
     friends,
     hasLoadedAnyApi,
     marketListings,
@@ -453,6 +480,7 @@ export function useGameApi() {
     transactions,
     claimActiveExpedition,
     loadAllApiData,
+    loadExpeditionLogs,
     loadFriends,
     loadMarketListings,
     loadMaterialBackpack,

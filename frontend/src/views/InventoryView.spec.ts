@@ -40,7 +40,7 @@ vi.mock('@/composables/useGameApi', () => ({
 
 function makeBackpack(overrides: Partial<MaterialBackpack> = {}): MaterialBackpack {
   return {
-    coins: 120,
+    sepoliaBalance: '0',
     inventory: [
       {
         materialId: 'MAT-2C',
@@ -72,7 +72,7 @@ function mountInventory() {
 beforeEach(() => {
   locale.value = 'en'
   mockBackpack.value = makeBackpack()
-  mockResources.value = { coins: 120, inventory: mockBackpack.value.inventory }
+  mockResources.value = { sepoliaBalance: '0', inventory: mockBackpack.value.inventory }
   Object.keys(mockQueryError).forEach((key) => {
     mockQueryError[key as keyof typeof mockQueryError] = ''
   })
@@ -94,7 +94,7 @@ describe('InventoryView', () => {
 
   it('shows empty state when backend inventory is empty', () => {
     mockBackpack.value = makeBackpack({ inventory: [] })
-    mockResources.value = { coins: 120, inventory: [] }
+    mockResources.value = { sepoliaBalance: '0', inventory: [] }
 
     const wrapper = mountInventory()
 
@@ -136,13 +136,16 @@ describe('InventoryView', () => {
     expect(wrapper.text()).toContain('local-db')
   })
 
-  it('keeps material actions reserved until backend APIs exist', async () => {
+  it('keeps material actions disabled until backend APIs exist', () => {
     const wrapper = mountInventory()
     const quantityInput = wrapper.get('input[type="number"]')
+    const actionButtons = wrapper.findAll('footer button')
 
-    await quantityInput.setValue('2')
-    await wrapper.findAll('footer button')[1]!.trigger('click')
-
-    expect(wrapper.text()).toContain('x2')
+    expect(quantityInput.attributes('disabled')).toBeDefined()
+    expect(actionButtons).toHaveLength(3)
+    actionButtons.forEach((button) => {
+      expect(button.attributes('disabled')).toBeDefined()
+    })
+    expect(wrapper.text()).toContain('素材操作需等待後端 API 開放')
   })
 })

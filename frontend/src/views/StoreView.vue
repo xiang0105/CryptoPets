@@ -22,6 +22,7 @@ const storeCopy = {
   select: '選擇',
   amount: '數量',
   price: '價格',
+  priceUnit: 'Sepolia',
   listItem: '上架素材',
   listing: '上架中',
   cancelListing: '取消上架',
@@ -52,7 +53,7 @@ const shelfSwitching = ref(false)
 const pendingRemoval = ref<GoodieSft | null>(null)
 const isInventoryModalOpen = ref(false)
 const selectedInventoryId = ref('')
-const listingPrice = ref(100)
+const listingPrice = ref(0.00000000001)
 const listingAmount = ref(1)
 const storeNotice = ref('')
 let shelfSwitchTimer: number | undefined
@@ -99,8 +100,8 @@ const transactions = computed(() => {
 
     return {
       action: item.action,
-      name: definition ? (isZh.value ? definition.name.zh : definition.name.en) : (item.materialId ?? text.value.coins),
-      amount: item.coinAmount,
+      name: definition ? (isZh.value ? definition.name.zh : definition.name.en) : (item.materialId ?? 'Sepolia'),
+      amount: Number(item.sepoliaAmount),
     }
   }).slice(0, 8)
 })
@@ -123,8 +124,12 @@ function gradeLabel(grade: string) {
   return grade
 }
 
-function coinAmount(amount: number) {
-  return `${amount > 0 ? '+' : ''}${amount} ${text.value.coins}`
+function marketAmount(amount: number) {
+  return amount === 0 ? '-' : `${amount > 0 ? '+' : ''}${amount} Sepolia`
+}
+
+function formatSepoliaPrice(price: number) {
+  return `${price} ${storeCopy.priceUnit}`
 }
 
 function removeListingLabel() {
@@ -153,7 +158,7 @@ function openInventoryModal() {
   const firstGoodie = inventoryGoodies.value[0]
 
   selectedInventoryId.value = selectedInventoryId.value || firstGoodie?.id || ''
-  listingPrice.value = selectedInventoryGoodie.value?.price ?? 100
+  listingPrice.value = 0.00000000001
   listingAmount.value = Math.min(listingAmount.value, maxListingAmount.value)
   isInventoryModalOpen.value = true
   void loadMaterialBackpack({ force: true })
@@ -169,7 +174,7 @@ function selectInventoryGoodie(goodie: GoodieSft | null) {
   }
 
   selectedInventoryId.value = goodie.id
-  listingPrice.value = goodie.price
+  listingPrice.value = 0.00000000001
   listingAmount.value = Math.min(1, goodie.amount)
 }
 
@@ -193,7 +198,7 @@ async function listSelectedGoodie() {
 
   try {
     const amount = Math.min(maxListingAmount.value, Math.max(1, Math.round(listingAmount.value)))
-    const price = Math.max(1, Math.round(listingPrice.value))
+    const price = Math.max(0.00000000001, Number(listingPrice.value))
     await requestListMarketMaterial(selectedGoodie.id, amount, price)
     storeNotice.value = `${text.value.listed} ${displayName(selectedGoodie)}`
     closeInventoryModal()
@@ -321,7 +326,7 @@ onMounted(() => {
           <footer>
             <div class="price-line">
               <i aria-hidden="true"></i>
-              <span>{{ goodie.price }}</span>
+              <span>{{ formatSepoliaPrice(goodie.price) }}</span>
             </div>
             <button
               type="button"
@@ -371,13 +376,13 @@ onMounted(() => {
           </div>
         </div>
 
-        <div class="sell-banner" aria-hidden="true">
+        <button class="sell-banner" type="button" @click="openInventoryModal">
           <span class="basket" aria-hidden="true"></span>
           <span>
             <strong>{{ text.listItem }}</strong>
             <small>{{ text.sellGoodies }}</small>
           </span>
-        </div>
+        </button>
       </div>
 
       <section class="overview-panel" aria-label="Marketplace overview">
@@ -417,7 +422,7 @@ onMounted(() => {
                   </header>
                   <div class="mini-image" aria-hidden="true"></div>
                   <footer>
-                    <span class="mini-price"><i aria-hidden="true"></i>{{ goodie.price }}</span>
+                    <span class="mini-price"><i aria-hidden="true"></i>{{ formatSepoliaPrice(goodie.price) }}</span>
                     <button
                       type="button"
                       :disabled="operationLoading.cancelListing"
@@ -446,7 +451,7 @@ onMounted(() => {
               <p v-for="item in transactions" :key="`${item.action}-${item.name}`">
                 <strong>{{ item.action }}: {{ item.name }}</strong>
                 <span :class="{ gain: item.amount > 0 }">
-                  {{ coinAmount(item.amount) }}
+                  {{ marketAmount(item.amount) }}
                 </span>
               </p>
             </div>
@@ -513,7 +518,6 @@ onMounted(() => {
                 <span class="material-frame">
                   <span class="material-icon" :class="`material-${goodie.element}`"></span>
                 </span>
-                <span class="inventory-price"><i aria-hidden="true"></i>{{ goodie.price }}</span>
                 <span class="inventory-action"><i aria-hidden="true"></i>{{ storeCopy.select }}</span>
                 <small>x{{ goodie.amount }}</small>
               </template>
@@ -533,7 +537,8 @@ onMounted(() => {
             </label>
             <label>
               {{ storeCopy.price }}
-              <input v-model.number="listingPrice" type="number" min="1" step="1" />
+              <input v-model.number="listingPrice" type="number" min="0.00000000001" step="0.00000000001" />
+              <small>{{ storeCopy.priceUnit }}</small>
             </label>
             <button type="button" :disabled="operationLoading.listMarketMaterial" @click="listSelectedGoodie">
               {{ operationLoading.listMarketMaterial ? storeCopy.listing : storeCopy.listItem }}
@@ -1113,6 +1118,8 @@ onMounted(() => {
   min-height: 76px;
   padding: 6px 28px 8px;
   color: #6d361e;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
   background: #fff2c9;
   border: 5px solid #36291f;

@@ -36,7 +36,7 @@
   - 驗收：未設定 RPC 或 NFT contract 時 `chain.enabled=false` 且 `nftContractAddress=null`。
 - [ ] 接入正式 Pet NFT ownership 來源。
   - 驗收：後端以 ERC-721 或 indexer 驗證玩家持有權，不依賴前端宣告。
-- [ ] 建立玩家資料 service tests。
+- [x] 建立玩家資料 service tests。
   - 驗收：初始化 idempotent，已存在玩家不會重複建立 pets。
 
 ## 素材背包與資產彙整
@@ -46,7 +46,7 @@
 - [x] 建立 `SupabaseMaterialBalanceProvider`。
   - 驗收：可 list/increase/decrease balance，餘額不足回穩定錯誤碼。
 - [x] 建立 `GET /resources`。
-  - 驗收：回傳 coins 與 inventory。
+  - 驗收：回傳 `sepoliaBalance` 相容欄位與 inventory；測試階段 `sepoliaBalance` 不代表可用交易餘額。
 - [x] 建立 `GET /materials/backpack`。
   - 驗收：回傳 `MaterialBackpack`，包含 `source`、`syncedAt`、`chain.enabled`、chain id 與 contract address。
 - [x] 未實作鏈上素材時回傳不可用狀態。
@@ -61,14 +61,14 @@
 - [x] 建立 `POST /claim-reward`。
   - 驗收：驗證遠征存在、屬於玩家、已完成且未領取，成功後更新 status/reward/claimed_at。
 - [x] 遠征獎勵寫入玩家資產。
-  - 驗收：領獎後 coins 增加、素材 balance 增加、pets exp 增加。
+  - 驗收：領獎後顯示 Sepolia 測試幣提示但不轉帳，素材 balance 增加、pets exp 增加。
 - [x] 遠征獎勵寫入交易紀錄。
   - 驗收：領獎後 `transactions.action='reward'`，metadata 包含 expeditionId、exp、materials。
 - [x] 套用森林 ID migration。
   - 驗收：資料庫接受 `orange`、`apple`、`snow-peach` 作為 `expedition_type`。
 - [x] 完成遠征 full-stack E2E。
   - 驗收：nonce/login/player/backpack/start/wait/claim/backpack/transactions 全流程通過。
-- [ ] 補齊遠征 integration tests。
+- [x] 補齊遠征 integration tests。
   - 驗收：涵蓋成功開始、重複開始、非本人 pet、未完成領獎、重複領獎、獎勵入帳。
 
 ## 市場流程
@@ -80,11 +80,11 @@
 - [x] 建立取消上架。
   - 驗收：`POST /market/cancel-listing` 驗證 listing ownership，取消後素材返還賣家。
 - [x] 建立購買上架。
-  - 驗收：`POST /market/buy-listing` 阻止購買自己的 listing，扣買家 coins、加賣家 coins、加買家素材。
+  - 驗收：`POST /market/buy-listing` 阻止購買自己的 listing；測試階段不扣款、不轉帳，只加買家素材並更新 listing 狀態。
 - [x] 建立市場交易紀錄。
   - 驗收：list/cancel/buy/sell 都寫入 `transactions`。
-- [ ] 補齊市場 integration tests。
-  - 驗收：涵蓋餘額不足、素材不足、非本人取消、成功交易與衝突狀態。
+- [x] 補齊市場 integration tests。
+  - 驗收：涵蓋測試階段不轉帳、素材不足、非本人取消、成功交易與衝突狀態。
 
 ## 好友流程
 
@@ -94,7 +94,7 @@
   - 驗收：存在 reciprocal pending request 時建立雙向 friendship。
 - [x] 建立好友列表查詢。
   - 驗收：`GET /friends` 回 `FriendSummary[]`。
-- [ ] 補齊好友 integration tests。
+- [x] 補齊好友 integration tests。
   - 驗收：涵蓋 pending、accepted、self、unknown wallet。
 
 ## API 合約與驗證
@@ -105,9 +105,9 @@
   - 驗收：`StartExpeditionRequest`、`ClaimRewardRequest`、`ListMarketMaterialRequest`、`ListingIdRequest`、`AddFriendRequest` 由前後端共同引用。
 - [x] 為主要 mutation 加上 Zod body validation。
   - 驗收：auth、friend、market、expedition mutation 都有 schema。
-- [ ] 強化所有 request body 與 query validation。
+- [x] 強化所有 request body 與 query validation。
   - 驗收：所有公開 API 的 input 都有明確 schema，錯誤回 `VALIDATION_ERROR`。
-- [ ] 建立 API error code 對照文件。
+- [x] 建立 API error code 對照文件。
   - 驗收：列出每個 endpoint 可能錯誤碼，前端可據此顯示提示。
 
 ## 資料庫與 Migration
@@ -116,13 +116,21 @@
   - 驗收：`backend/supabase/schema.sql` 與 `clear_game_data.sql` 可重建 MVP 資料結構。
 - [x] 建立遠征森林 ID migration。
   - 驗收：`migrate_expedition_type_to_forests.sql` 將 constraint 改為 `orange/apple/snow-peach`。
-- [ ] 建立正式 migration 流程。
+- [x] 建立正式 migration 流程。
   - 驗收：不只 schema dump，還有可排序、可重跑、可審查的 migration 檔案。
-- [ ] 補齊 seed 或測試資料建立流程。
+- [x] 補齊 seed 或測試資料建立流程。
   - 驗收：能建立可登入玩家、素材餘額、市場 listing 與好友資料。
 
 ## 營運與安全
 
+- [ ] 建立 Pet ERC-721 合約。
+  - 驗收：合約支援 mint、ownerOf、tokenURI、baseURI 或 per-token URI、角色權限與事件；後端可用 tokenId 查詢玩家持有權。
+- [ ] 建立 Material ERC-1155 合約。
+  - 驗收：合約支援 mint/burn、balanceOf、uri、批量查詢友善介面、角色權限與事件；後端可用 wallet + material tokenId 查詢餘額。
+- [ ] 建立 Sepolia 交易/轉帳合約。
+  - 驗收：正式開啟交易前，合約規格明確定義付款方、收款方、金額、listingId、事件與防重放；測試階段不得由前端或後端發起實際轉帳。
+- [ ] 建立鏈上合約部署與地址管理文件。
+  - 驗收：記錄 chain id、合約地址、部署者、角色權限、RPC、區塊鏈瀏覽器連結與前後端 env 對應。
 - [ ] 補齊 production logging。
   - 驗收：request id、endpoint、status、duration、錯誤碼可追蹤，不輸出 secret。
 - [ ] 補齊 rate limit。

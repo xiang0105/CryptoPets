@@ -39,13 +39,13 @@
 - [x] 建立 `isKnownMaterialId()`。
   - 驗收：後端市場上架 validation 可用它檢查素材 ID。
 - [x] 定義素材顯示資料。
-  - 驗收：每個素材包含 name、slug、element、grade、description、basePrice。
+  - 驗收：每個素材包含 name、slug、element、grade、description；素材不包含固定價值。
 - [ ] 補齊 MVP 遠征與市場所需素材。
   - 驗收：遠征獎勵、背包、上架、購買流程都有足夠素材可測。
 - [ ] 建立 Material ID 到 ERC-1155 tokenId mapping。
   - 驗收：鏈上接入時可由 material id 找到 token id。
 - [ ] 補齊素材內容 validation。
-  - 驗收：id/slug 不重複，grade 合法，basePrice 合理，asset 存在。
+  - 驗收：id/slug 不重複，grade 合法，asset 存在，且不定義素材固定價格。
 
 ## 遠征森林與劇本
 
@@ -113,13 +113,17 @@
 - [ ] 建立 Pet metadata JSON schema。
   - 驗收：name、description、image、attributes 格式符合 ERC-721 metadata 慣例。
 - [ ] 建立 Material metadata JSON schema。
-  - 驗收：name、description、image、attributes 格式符合 ERC-1155 metadata 慣例。
+  - 驗收：name、description、image、attributes 格式符合 ERC-1155 metadata 慣例；metadata 不包含素材固定價格。
 - [ ] 建立 Pet game id 與 ERC-721 metadata mapping。
   - 驗收：後端可由鏈上 token 對應回遊戲內 pet definition。
 - [ ] 建立 Material ID 與 ERC-1155 tokenId mapping。
   - 驗收：後端可由鏈上 token 對應回素材 definition。
 - [ ] 規劃 IPFS/Arweave 上傳流程。
   - 驗收：metadata 與圖片有不可變 URI，並能寫入合約或 indexer。
+- [ ] 建立鏈上 token id 對應表。
+  - 驗收：Pet game id、Material ID 與鏈上 tokenId 有可審查、可重跑的對應來源。
+- [ ] 建立 metadata URI 發布清單。
+  - 驗收：輸出 Pet tokenId、Material tokenId、metadata URI、image URI、content hash，供合約部署與後端同步使用。
 
 ## 內容品質與測試
 

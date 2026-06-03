@@ -19,6 +19,24 @@ coverage
 !frontend/.env.example
 !backend/.env.example
 
+# Local test reports and investigation notes
+Error.md
+ERROR.md
+error.md
+*.har
+playwright-report/
+test-results/
+
+# Secrets, wallets, and deployment credentials
+*.pem
+*.key
+*.p12
+*.keystore
+wallets/
+keystore/
+private-keys/
+secrets/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

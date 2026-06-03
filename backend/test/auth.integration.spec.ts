@@ -296,6 +296,25 @@ describe('auth integration', () => {
     expect(await invalidTokenResponse.json()).toMatchObject({ error: 'INVALID_AUTH_TOKEN' })
   })
 
+  it('rejects unknown request body fields', async () => {
+    const wallet = Wallet.createRandom()
+
+    const response = await post('/auth/nonce', { wallet: wallet.address, unexpected: true })
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toBe('VALIDATION_ERROR')
+    expect(nonceRows).toHaveLength(0)
+  })
+
+  it('rejects unknown query parameters', async () => {
+    const response = await fetch(`${baseUrl}/health?unexpected=true`)
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toBe('VALIDATION_ERROR')
+  })
+
   async function createChallenge(wallet: Wallet) {
     const response = await post('/auth/nonce', { wallet: wallet.address })
     expect(response.status).toBe(200)
