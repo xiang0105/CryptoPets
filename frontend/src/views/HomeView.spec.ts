@@ -1,13 +1,14 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { reactive, ref } from 'vue'
-import type { ExpeditionSummary } from '@cryptopets/shared'
+import type { ExpeditionLogEntry, ExpeditionSummary } from '@cryptopets/shared'
 import HomeView from './HomeView.vue'
 import { locale } from '@/i18n'
 import { replacePets, type Pet } from '@/data/pets'
 import { setExpeditionTeam } from '@/state/expeditionTeam'
 
 const mockApiActiveExpedition = ref<ExpeditionSummary | null>(null)
+const mockExpeditionLogs = ref<ExpeditionLogEntry[]>([])
 const mockOperationError = reactive({
   startExpedition: '',
   claimReward: '',
@@ -42,16 +43,19 @@ const mockQueryLoading = reactive({
 })
 
 const loadPlayerProfile = vi.fn()
+const loadExpeditionLogs = vi.fn()
 const startTeamExpedition = vi.fn()
 const claimActiveExpedition = vi.fn()
 
 vi.mock('@/composables/useGameApi', () => ({
   useGameApi: () => ({
     activeExpedition: mockApiActiveExpedition,
+    expeditionLogs: mockExpeditionLogs,
     operationError: mockOperationError,
     operationLoading: mockOperationLoading,
     queryError: mockQueryError,
     queryLoading: mockQueryLoading,
+    loadExpeditionLogs,
     loadPlayerProfile,
     startTeamExpedition,
     claimActiveExpedition,
@@ -104,6 +108,7 @@ beforeEach(() => {
   replacePets(testPets)
   setExpeditionTeam(['pet-1'])
   mockApiActiveExpedition.value = null
+  mockExpeditionLogs.value = []
   Object.keys(mockOperationError).forEach((key) => {
     mockOperationError[key as keyof typeof mockOperationError] = ''
   })
@@ -117,13 +122,14 @@ beforeEach(() => {
     mockQueryLoading[key as keyof typeof mockQueryLoading] = false
   })
   loadPlayerProfile.mockReset().mockResolvedValue(undefined)
+  loadExpeditionLogs.mockReset().mockResolvedValue(undefined)
   startTeamExpedition.mockReset().mockResolvedValue(makeExpeditionSummary())
   claimActiveExpedition.mockReset().mockResolvedValue(
     makeExpeditionSummary({
       status: 'claimed',
       endsAt: new Date(Date.now() - 1_000).toISOString(),
       reward: {
-        coins: 25,
+        sepoliaAmount: '0.00000000001',
         exp: 40,
         materials: [{ id: 'MAT-2C', count: 1 }],
       },
@@ -141,6 +147,7 @@ describe('HomeView expedition smoke', () => {
     await flushPromises()
 
     expect(startTeamExpedition).toHaveBeenCalledWith(['pet-1'], 'orange')
+    expect(loadExpeditionLogs).toHaveBeenCalledWith({ force: true })
     expect(wrapper.text()).toContain('Orange Forest')
   })
 
@@ -170,11 +177,54 @@ describe('HomeView expedition smoke', () => {
     await orangeStart!.trigger('click')
     await flushPromises()
 
+    claimActiveExpedition.mockImplementation(async () => {
+      mockExpeditionLogs.value = [
+        {
+          id: 'log-1',
+          expeditionId: 'expedition-1',
+          at: new Date().toISOString(),
+          message: {
+            zh: '後端已確認遠征獎勵：0.00000000001 Sepolia、40 EXP、柚子碎片 x1。',
+            en: 'Backend reward confirmed: 0.00000000001 Sepolia, 40 EXP, Yuzu Bite x1.',
+          },
+          variant: 'notice',
+        },
+      ]
+      return makeExpeditionSummary({
+        status: 'claimed',
+        endsAt: new Date(Date.now() - 1_000).toISOString(),
+        reward: {
+          sepoliaAmount: '0.00000000001',
+          exp: 40,
+          materials: [{ id: 'MAT-2C', count: 1 }],
+        },
+      })
+    })
+
     await wrapper.get('button.claim-reward-button').trigger('click')
     await flushPromises()
 
     expect(claimActiveExpedition).toHaveBeenCalledWith('expedition-1')
     expect(wrapper.text()).toContain('Backend reward confirmed')
+  })
+
+  it('renders expedition logs loaded from backend', () => {
+    mockExpeditionLogs.value = [
+      {
+        id: 'log-1',
+        expeditionId: 'expedition-1',
+        at: '2026-06-03T08:00:00.000Z',
+        message: {
+          zh: '水豚隊從後端讀取遠征紀錄。',
+          en: 'The party loaded expedition logs from the backend.',
+        },
+        variant: null,
+      },
+    ]
+
+    const wrapper = mountHome()
+
+    expect(wrapper.text()).toContain('The party loaded expedition logs from the backend.')
   })
 
   it('shows expedition errors with retry affordance', async () => {

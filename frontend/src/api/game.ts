@@ -1,5 +1,6 @@
 import type {
   AddFriendRequest,
+  ExpeditionLogEntry,
   ClaimRewardRequest,
   ExpeditionSummary,
   ExpeditionType,
@@ -43,6 +44,10 @@ export function claimReward(expeditionId: string) {
     method: 'POST',
     body: JSON.stringify(payload),
   })
+}
+
+export function getExpeditionLogs() {
+  return apiRequest<ExpeditionLogEntry[]>('/expedition/logs')
 }
 
 export function addFriend(wallet: string) {

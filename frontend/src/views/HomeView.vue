@@ -1,6 +1,6 @@
 ﻿<script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import type { ExpeditionSummary } from '@cryptopets/shared'
+import type { ExpeditionLogEntry as ApiExpeditionLogEntry, ExpeditionSummary } from '@cryptopets/shared'
 import { pets, type Pet } from '@/data/pets'
 import { useGameApi } from '@/composables/useGameApi'
 import { expeditionTeamPets } from '@/state/expeditionTeam'
@@ -9,16 +9,11 @@ import orangeMap from '@game-content/assets/maps/orange.png'
 import { currentMessages, isZh } from '@/i18n'
 import {
   expeditionForests,
-  materialDefinitions,
   petElementMeta,
   type ExpeditionForest,
-  type StoryBeat,
-  type StoryCheckOperator,
-  type StoryCondition,
 } from '@cryptopets/game-content'
 
 const elementMeta = petElementMeta
-const materialDefinitionById = new Map(materialDefinitions.map((material) => [material.id, material]))
 
 const text = computed(() => ({
   ...currentMessages.value.home,
@@ -29,7 +24,9 @@ const {
   queryError,
   queryLoading,
   activeExpedition: apiActiveExpedition,
+  expeditionLogs: apiExpeditionLogs,
   loadPlayerProfile,
+  loadExpeditionLogs,
   claimActiveExpedition,
   startTeamExpedition,
 } = useGameApi()
@@ -49,7 +46,6 @@ interface ExpeditionRecord {
   apiId?: string
   startedAt: number
   finishAt: number
-  logs: ExpeditionLogEntry[]
 }
 
 const forestOptions: ForestOption[] = expeditionForests
@@ -58,10 +54,10 @@ const fruitFrameIndex = ref(0)
 const logLinesElement = ref<HTMLElement | null>(null)
 const now = ref(Date.now())
 const activeExpedition = ref<ExpeditionRecord | null>(loadStoredExpedition())
-const expeditionHistory = ref<ExpeditionLogEntry[]>(loadStoredExpeditionHistory())
 const lastSelectedForest = ref<ForestOption | null>(null)
 let fruitTimer: number | undefined
 let clockTimer: number | undefined
+let logRefreshTimer: number | undefined
 let fruitCycleStarted = 0
 const fruitCycleDuration = 12800
 
@@ -83,19 +79,12 @@ const expeditionProgress = computed(() => {
 
   return Math.min(100, Math.max(0, Math.round((elapsed / total) * 100)))
 })
-const nextExpeditionLog = computed(() => {
-  if (!activeExpedition.value) {
-    return null
-  }
-
-  return activeExpedition.value.logs.find((log) => log.at > now.value) ?? null
-})
 const remainingTime = computed(() => {
   if (!activeExpedition.value) {
     return text.value.ready
   }
 
-  const nextAt = nextExpeditionLog.value?.at ?? activeExpedition.value.finishAt
+  const nextAt = activeExpedition.value.finishAt
   const seconds = Math.max(0, Math.ceil((nextAt - now.value) / 1000))
   const minutes = Math.floor(seconds / 60)
   const restSeconds = seconds % 60
@@ -122,12 +111,7 @@ const currentStatusTitle = computed(() => {
     : `${selectedForest.value.name.en} started`
 })
 const visibleLogEntries = computed(() => {
-  const activeLogs = activeExpedition.value?.logs.filter((log) => log.at <= now.value) ?? []
-
-  return [...activeLogs, ...expeditionHistory.value]
-    .sort((logA, logB) => logB.at - logA.at)
-    .slice(0, 24)
-    .sort((logA, logB) => logA.at - logB.at)
+  return apiExpeditionLogs.value.map(mapApiLog)
 })
 
 function scrollLogToLatest() {
@@ -164,16 +148,8 @@ function loadStoredExpedition(): ExpeditionRecord | null {
   return null
 }
 
-function loadStoredExpeditionHistory() {
-  return []
-}
-
 function saveStoredExpedition(record: ExpeditionRecord | null) {
   void record
-}
-
-function saveStoredExpeditionHistory(entries: ExpeditionLogEntry[]) {
-  void entries
 }
 
 function formatLogTime(timestamp: number) {
@@ -186,147 +162,24 @@ function formatLogTime(timestamp: number) {
   return `${month}/${day} ${hours}:${minutes}`
 }
 
+function displayLogEntry(log: ExpeditionLogEntry) {
+  return log.variant === 'notice' ? log.message : `${formatLogTime(log.at)}　${log.message}`
+}
+
+function mapApiLog(log: ApiExpeditionLogEntry): ExpeditionLogEntry {
+  return {
+    at: new Date(log.at).getTime(),
+    message: isZh.value ? log.message.zh : log.message.en,
+    variant: log.variant ?? undefined,
+  }
+}
+
 function petLevel(pet: Pet) {
   return pet.level
 }
 
-function abilityNote(forest: ForestOption) {
-  const power = teamPower.value
-  const requiredPower = 185 + forest.difficulty * 35
-
-  if (power >= requiredPower) {
-    return text.value.routeStrong
-  }
-
-  if (power >= requiredPower - 30) {
-    return text.value.routeSteady
-  }
-
-  return text.value.routeWeak
-}
-
 function currentExpeditionTeam() {
   return expeditionTeamPets.value.length > 0 ? expeditionTeamPets.value : pets
-}
-
-function teamMetricValue(metric: NonNullable<StoryCondition['metric']>) {
-  const team = currentExpeditionTeam()
-
-  if (metric === 'teamPower') {
-    return Math.round(team.reduce((sum, pet) => sum + pet.stats.hp + pet.stats.atk * 1.4 + pet.stats.def * 1.2 + pet.stage * 12, 0))
-  }
-
-  if (metric === 'teamHp') {
-    return team.reduce((sum, pet) => sum + pet.stats.hp, 0)
-  }
-
-  if (metric === 'teamAtk') {
-    return team.reduce((sum, pet) => sum + pet.stats.atk, 0)
-  }
-
-  return team.reduce((sum, pet) => sum + pet.stats.def, 0)
-}
-
-function compareStoryValue(actual: number, operator: StoryCheckOperator, expected: number) {
-  if (operator === 'gt') {
-    return actual > expected
-  }
-
-  if (operator === 'lte') {
-    return actual <= expected
-  }
-
-  if (operator === 'lt') {
-    return actual < expected
-  }
-
-  return actual >= expected
-}
-
-function storyConditionMatches(condition?: StoryCondition) {
-  if (!condition) {
-    return true
-  }
-
-  const leader = currentExpeditionTeam()[0]
-  const team = currentExpeditionTeam()
-
-  if (condition.leaderElement && leader?.element !== condition.leaderElement) {
-    return false
-  }
-
-  if (condition.teamPetName && !team.some((pet) => pet.name === condition.teamPetName)) {
-    return false
-  }
-
-  if (typeof condition.chancePercent === 'number' && Math.random() * 100 >= condition.chancePercent) {
-    return false
-  }
-
-  if (condition.metric && condition.operator && typeof condition.value === 'number') {
-    return compareStoryValue(teamMetricValue(condition.metric), condition.operator, condition.value)
-  }
-
-  return true
-}
-
-function storyBeatMessage(event: StoryBeat) {
-  const outcome = event.outcomes.find((entry) => storyConditionMatches(entry.condition)) ?? event.outcomes[0]
-  const setup = isZh.value ? event.setup.zh : event.setup.en
-  const result = outcome ? (isZh.value ? outcome.text.zh : outcome.text.en) : ''
-
-  return result ? `${setup} ${result}` : setup
-}
-
-function buildExpeditionLogs(forest: ForestOption, startedAt: number, finishAt = startedAt + forest.durationSeconds * 1000): ExpeditionLogEntry[] {
-  const teamNames = expeditionTeamPets.value.map((pet) => pet.name).join('、') || 'Capybara Team'
-  const durationSeconds = Math.max(1, (finishAt - startedAt) / 1000)
-  const eventGap = durationSeconds / (forest.scriptEvents.length + 1)
-  const firstEntry = {
-    at: startedAt,
-    message: isZh.value
-      ? `${teamNames} 選擇${forest.name.zh}劇本。隊伍評分 ${teamPower.value}，難度 ${forest.difficulty}。${abilityNote(forest)}`
-      : `${teamNames} chose the ${forest.name.en} script. Team score ${teamPower.value}, difficulty ${forest.difficulty}. ${abilityNote(forest)}`,
-  }
-  const scriptEntries = forest.scriptEvents.map((event, index) => ({
-    at: startedAt + Math.round(eventGap * (index + 1) * 1000),
-    message: storyBeatMessage(event),
-  }))
-  const finishEntry = {
-    at: finishAt,
-    message: isZh.value
-      ? `${forest.name.zh}劇本完成，遠征隊帶回 ${forest.reward}。`
-      : `${forest.name.en} script completed. The party returned with ${forest.reward}.`,
-  }
-
-  return [firstEntry, ...scriptEntries, finishEntry]
-}
-
-function rewardMaterialLabel(materialId: string) {
-  const material = materialDefinitionById.get(materialId)
-
-  return material ? (isZh.value ? material.name.zh : material.name.en) : materialId
-}
-
-function buildRewardLog(summary: ExpeditionSummary): ExpeditionLogEntry | null {
-  if (!summary.reward) {
-    return null
-  }
-
-  const materials = summary.reward.materials.map((material) => `${rewardMaterialLabel(material.id)} x${material.count}`)
-  const rewards = [
-    `${summary.reward.coins} ${isZh.value ? '金幣' : 'coins'}`,
-    `${summary.reward.exp} EXP`,
-    ...materials,
-  ]
-
-  return {
-    at: Date.now(),
-    message: isZh.value
-      ? `後端已確認遠征獎勵：${rewards.join('、')}。`
-      : `Backend reward confirmed: ${rewards.join(', ')}.`,
-    variant: 'notice',
-  }
 }
 
 function expeditionRecordFromSummary(summary: ExpeditionSummary): ExpeditionRecord | null {
@@ -348,7 +201,6 @@ function expeditionRecordFromSummary(summary: ExpeditionSummary): ExpeditionReco
     apiId: summary.id,
     startedAt,
     finishAt,
-    logs: buildExpeditionLogs(forest, startedAt, finishAt),
   }
 }
 
@@ -376,6 +228,7 @@ async function startExpedition(forest: ForestOption) {
     activeExpedition.value = record
     saveStoredExpedition(record)
     now.value = Date.now()
+    await loadExpeditionLogs({ force: true }).catch(() => undefined)
   }
 }
 
@@ -416,24 +269,15 @@ async function completeExpedition() {
     return
   }
 
-  let rewardLog: ExpeditionLogEntry | null = null
-
   if (activeExpedition.value.apiId) {
     try {
-      const summary = await claimActiveExpedition(activeExpedition.value.apiId)
-      rewardLog = buildRewardLog(summary)
+      await claimActiveExpedition(activeExpedition.value.apiId)
+      await loadExpeditionLogs({ force: true }).catch(() => undefined)
     } catch {
       return
     }
   }
 
-  const completedLogs = rewardLog ? [...activeExpedition.value.logs, rewardLog] : activeExpedition.value.logs
-
-  expeditionHistory.value = [...completedLogs, ...expeditionHistory.value]
-    .sort((logA, logB) => logB.at - logA.at)
-    .slice(0, 24)
-    .sort((logA, logB) => logA.at - logB.at)
-  saveStoredExpeditionHistory(expeditionHistory.value)
   activeExpedition.value = null
   saveStoredExpedition(null)
 }
@@ -446,6 +290,7 @@ function syncCompletedExpedition() {
 
 onMounted(() => {
   void syncActiveExpeditionFromApi()
+  void loadExpeditionLogs().catch(() => undefined)
   syncCompletedExpedition()
   scrollLogToLatest()
   fruitCycleStarted = performance.now()
@@ -455,6 +300,11 @@ onMounted(() => {
     now.value = Date.now()
     syncCompletedExpedition()
   }, 1000)
+  logRefreshTimer = window.setInterval(() => {
+    if (activeExpedition.value) {
+      void loadExpeditionLogs({ force: true }).catch(() => undefined)
+    }
+  }, 5000)
 })
 
 watch(
@@ -470,6 +320,9 @@ onUnmounted(() => {
   }
   if (clockTimer) {
     window.clearInterval(clockTimer)
+  }
+  if (logRefreshTimer) {
+    window.clearInterval(logRefreshTimer)
   }
 })
 </script>
@@ -582,18 +435,19 @@ onUnmounted(() => {
           </div>
           <h3>{{ text.expeditionLog }}</h3>
           <div ref="logLinesElement" class="log-lines">
-            <p v-for="log in visibleLogEntries" :key="`${log.at}-${log.message}`" :class="{ 'is-notice': log.variant === 'notice' }">
-              <span v-if="log.variant !== 'notice'" class="log-time">{{ formatLogTime(log.at) }}</span>
-              <span class="log-message">{{ log.message }}</span>
+            <p
+              v-for="log in visibleLogEntries"
+              :key="`${log.at}-${log.message}`"
+              :class="{ 'is-notice': log.variant === 'notice' }"
+            >
+              {{ displayLogEntry(log) }}
             </p>
-            <span v-if="visibleLogEntries.length === 0"></span>
             <p v-if="visibleLogEntries.length === 0" class="is-notice">
-              <span class="log-message">{{ isZh ? '尚無遠征紀錄' : 'No expedition logs yet' }}</span>
+              {{ isZh ? '尚無遠征紀錄' : 'No expedition logs yet' }}
             </p>
             <p v-if="operationError.claimReward" class="is-notice">
-              <span class="log-message">{{ operationError.claimReward }}</span>
+              {{ operationError.claimReward }}
             </p>
-            <span class="log-bottom-spacer" aria-hidden="true"></span>
           </div>
         </div>
       </aside>
@@ -1169,6 +1023,8 @@ onUnmounted(() => {
 
 .log-sheet {
   position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
   padding: 42px 28px 22px;
@@ -1324,66 +1180,59 @@ onUnmounted(() => {
 }
 
 .log-lines {
-  display: grid;
-  align-content: start;
-  height: 85%;
-  overflow: auto;
-  padding: 0;
+  display: block;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0 10px 18px 0;
   background:
-    repeating-linear-gradient(180deg, transparent 0 35px, rgba(125, 188, 173, 0.5) 36px 37px, transparent 38px),
+    repeating-linear-gradient(180deg, transparent 0 33px, rgba(125, 188, 173, 0.34) 34px 35px, transparent 36px),
     linear-gradient(90deg, transparent 0 18px, #e9aaa1 18px 20px, transparent 20px);
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+  scrollbar-color: #7dbcad rgba(255, 247, 223, 0.45);
+  scrollbar-width: thin;
 }
 
 .log-lines::-webkit-scrollbar {
-  display: none;
+  width: 10px;
 }
 
-.log-lines > span {
-  display: block;
-  height: 38px;
-  border-bottom: 2px solid #c9e4d9;
+.log-lines::-webkit-scrollbar-track {
+  background: rgba(255, 247, 223, 0.45);
+  border-radius: 999px;
 }
 
-.log-lines > .log-bottom-spacer {
-  height: 50px;
-  border-bottom: 0;
+.log-lines::-webkit-scrollbar-thumb {
+  background: #7dbcad;
+  border: 2px solid #fff7df;
+  border-radius: 999px;
 }
 
 .log-lines p {
-  display: grid;
-  gap: 2px;
-  min-height: 38px;
-  margin: 0;
-  padding: 6px 10px 6px 28px;
+  display: block;
+  position: static;
+  box-sizing: border-box;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  margin: 0 0 8px;
+  padding: 8px 10px 8px 30px;
   color: #4c3324;
   font-size: 13px;
   font-weight: 400;
-  line-height: 1.25;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: normal;
   background: transparent;
   border-bottom: 1px solid rgba(125, 188, 173, 0.45);
 }
 
-.log-time {
-  color: #8a5d3c;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1;
-}
-
-.log-message {
-  font-weight: 400;
-}
-
 .log-lines p.is-notice {
-  align-content: center;
   min-height: 34px;
-  padding-top: 5px;
-  padding-bottom: 5px;
+  padding: 8px 10px;
   color: #2f6f66;
   font-size: 13px;
   font-weight: 500;
+  line-height: 1.45;
   text-align: center;
   background: rgba(114, 197, 180, 0.14);
   border-block: 1px solid rgba(75, 142, 130, 0.32);

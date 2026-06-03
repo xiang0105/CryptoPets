@@ -17,25 +17,18 @@ import { materialBalanceProvider } from './materialBalanceProvider.js'
 const listMaterialSchema: z.ZodType<ListMarketMaterialRequest> = z.object({
   materialId: z.string().min(1).max(64).refine(isKnownMaterialId, 'UNKNOWN_MATERIAL_ID'),
   amount: z.number().int().positive().max(999),
-  price: z.number().int().positive().max(1_000_000),
-})
+  price: z.number().positive().max(1_000_000),
+}).strict()
 
 const listingIdSchema: z.ZodType<ListingIdRequest> = z.object({
   listingId: z.string().uuid(),
-})
+}).strict()
 
 export async function getPlayerResources(userId: string): Promise<PlayerResources> {
-  const [currencyResult, inventory] = await Promise.all([
-    supabase.from('currencies').select('coins').eq('user_id', userId).maybeSingle(),
-    materialBalanceProvider.listBalances(userId),
-  ])
-
-  if (currencyResult.error) {
-    throw new HttpError(500, 'CURRENCY_LOOKUP_FAILED')
-  }
+  const inventory = await materialBalanceProvider.listBalances(userId)
 
   return {
-    coins: currencyResult.data?.coins ?? 0,
+    sepoliaBalance: '0',
     inventory,
   }
 }
@@ -98,7 +91,7 @@ export async function getPlayerTransactions(userId: string): Promise<PlayerTrans
     action: transaction.action,
     materialId: transaction.material_id,
     materialAmount: transaction.material_amount,
-    coinAmount: transaction.coin_amount,
+    sepoliaAmount: String(transaction.coin_amount ?? 0),
     createdAt: transaction.created_at,
   }))
 }
@@ -129,7 +122,7 @@ export async function listMaterial(userId: string, input: unknown): Promise<Mark
     action: 'list',
     materialId: body.materialId,
     materialAmount: body.amount,
-    coinAmount: 0,
+    sepoliaAmount: 0,
   })
 
   return mapListing(listing)
@@ -161,7 +154,7 @@ export async function cancelListing(userId: string, input: unknown): Promise<Mar
     action: 'cancel',
     materialId: listing.material_id,
     materialAmount: listing.amount,
-    coinAmount: 0,
+    sepoliaAmount: 0,
   })
 
   return mapListing(updated)
@@ -174,8 +167,6 @@ export async function buyListing(userId: string, input: unknown): Promise<Market
   if (listing.seller_id === userId) {
     throw new HttpError(400, 'CANNOT_BUY_OWN_LISTING')
   }
-
-  await changeCoins(userId, -listing.price)
 
   const { data: updated, error } = await supabase
     .from('market_listings')
@@ -190,12 +181,10 @@ export async function buyListing(userId: string, input: unknown): Promise<Market
     .single()
 
   if (error || !updated) {
-    await changeCoins(userId, listing.price)
     throw new HttpError(409, 'MARKET_LISTING_BUY_CONFLICT')
   }
 
   await Promise.all([
-    changeCoins(listing.seller_id, listing.price),
     materialBalanceProvider.increase(userId, listing.material_id, listing.amount),
     recordTransaction(userId, {
       listingId: listing.id,
@@ -203,7 +192,7 @@ export async function buyListing(userId: string, input: unknown): Promise<Market
       action: 'buy',
       materialId: listing.material_id,
       materialAmount: listing.amount,
-      coinAmount: -listing.price,
+      sepoliaAmount: 0,
     }),
     recordTransaction(listing.seller_id, {
       listingId: listing.id,
@@ -211,7 +200,7 @@ export async function buyListing(userId: string, input: unknown): Promise<Market
       action: 'sell',
       materialId: listing.material_id,
       materialAmount: listing.amount,
-      coinAmount: listing.price,
+      sepoliaAmount: 0,
     }),
   ])
 
@@ -243,30 +232,6 @@ async function getOwnedActiveListing(userId: string, listingId: string) {
   return listing
 }
 
-async function changeCoins(userId: string, delta: number) {
-  const { data, error } = await supabase.from('currencies').select('coins').eq('user_id', userId).maybeSingle()
-
-  if (error) {
-    throw new HttpError(500, 'CURRENCY_LOOKUP_FAILED')
-  }
-
-  const nextCoins = (data?.coins ?? 0) + delta
-
-  if (nextCoins < 0) {
-    throw new HttpError(409, 'INSUFFICIENT_COINS')
-  }
-
-  const { error: updateError } = await supabase.from('currencies').upsert({
-    user_id: userId,
-    coins: nextCoins,
-    updated_at: new Date().toISOString(),
-  })
-
-  if (updateError) {
-    throw new HttpError(500, 'CURRENCY_UPDATE_FAILED')
-  }
-}
-
 async function recordTransaction(
   userId: string,
   input: {
@@ -275,7 +240,7 @@ async function recordTransaction(
     action: 'list' | 'buy' | 'sell' | 'cancel'
     materialId: string
     materialAmount: number
-    coinAmount: number
+    sepoliaAmount: number
   },
 ) {
   const { error } = await supabase.from('transactions').insert({
@@ -285,7 +250,7 @@ async function recordTransaction(
     action: input.action,
     material_id: input.materialId,
     material_amount: input.materialAmount,
-    coin_amount: input.coinAmount,
+    coin_amount: input.sepoliaAmount,
   })
 
   if (error) {
@@ -299,7 +264,7 @@ function mapListing(listing: {
   seller?: { wallet?: string | null } | Array<{ wallet?: string | null }> | null
   material_id: string
   amount: number
-  price: number
+  price: number | string
   status: 'active' | 'sold' | 'cancelled'
   buyer_id: string | null
   created_at: string
@@ -313,7 +278,7 @@ function mapListing(listing: {
     sellerWallet: seller?.wallet ? `0x${seller.wallet.slice(2)}` : null,
     materialId: listing.material_id,
     amount: listing.amount,
-    price: listing.price,
+    price: Number(listing.price),
     status: listing.status,
     buyerId: listing.buyer_id,
     createdAt: listing.created_at,

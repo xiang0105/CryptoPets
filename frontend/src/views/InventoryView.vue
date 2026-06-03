@@ -11,18 +11,18 @@ const detailCopy = {
   emptyName: '空素材格',
   emptyDescription: '後端沒有回傳可用素材時，背包會保持空格；若鏈上素材尚未啟用，請以同步狀態為準。',
   stackLimit: '堆疊上限：',
-  value: '價值：',
+  tradeHint: '交易：',
   origin: '來源：',
   syncedAt: '同步時間：',
-  coins: '金幣',
   chainReserved: '預留給鏈上素材資料',
+  noMaterialValue: '素材沒有固定價值，市場價格由上架者自行決定。',
   notSynced: '尚未同步',
   discard: '丟棄',
   use: '使用',
   sellAll: '出售',
   quantity: '數量',
   selectMaterialFirst: '請先選擇素材。',
-  actionReserved: '此操作已可點擊，後端動作尚未開放。',
+  actionReserved: '素材操作需等待後端 API 開放，前端不會本地修改資料。',
 }
 const shelfPageSize = 20
 const selectedSlot = ref(0)
@@ -37,7 +37,6 @@ const isLoadingBackpack = computed(() => queryLoading.backpack)
 const backpackError = computed(() => queryError.backpack)
 const isLoadingResources = computed(() => queryLoading.resources)
 const resourcesError = computed(() => queryError.resources)
-const coinBalance = computed(() => resources.value?.coins ?? backpack.value?.coins ?? 0)
 
 const materialSlots = computed(() => {
   const inventory = backpack.value?.inventory ?? []
@@ -52,7 +51,7 @@ const materialSlots = computed(() => {
         element: definition?.element ?? 1,
         grade: definition?.grade ?? 'D',
         description: definition?.description ?? item.materialId,
-        price: definition?.basePrice ?? 0,
+        price: 0,
       }
     })
 })
@@ -68,8 +67,10 @@ const shelfSlots = computed(() => {
 })
 const selectedMaterial = computed(() => materialSlots.value[selectedSlot.value] ?? null)
 const hasMaterials = computed(() => materialSlots.value.some((slot) => slot !== null))
-const canUseSelectedMaterial = computed(() => Boolean(selectedMaterial.value))
+const materialActionsEnabled = computed(() => false)
+const canUseSelectedMaterial = computed(() => Boolean(selectedMaterial.value) && materialActionsEnabled.value)
 const maxActionAmount = computed(() => Math.max(1, selectedMaterial.value?.amount ?? 1))
+const reservedActionNotice = computed(() => (selectedMaterial.value ? detailCopy.actionReserved : ''))
 const backpackSource = computed(() => {
   if (!backpack.value) {
     return detailCopy.chainReserved
@@ -137,6 +138,11 @@ function materialName(material: NonNullable<(typeof materialSlots.value)[number]
 }
 
 function handleDetailAction(action: string) {
+  if (!materialActionsEnabled.value) {
+    detailNotice.value = detailCopy.actionReserved
+    return
+  }
+
   if (!selectedMaterial.value) {
     detailNotice.value = detailCopy.selectMaterialFirst
     return
@@ -246,8 +252,8 @@ onBeforeUnmount(() => {
               <dd>{{ selectedMaterial?.amount ?? 0 }} / 99</dd>
             </div>
             <div>
-              <dt>{{ detailCopy.value }}</dt>
-              <dd>{{ selectedMaterial ? selectedMaterial.price * selectedMaterial.amount : 0 }} {{ detailCopy.coins }}</dd>
+              <dt>{{ detailCopy.tradeHint }}</dt>
+              <dd>{{ detailCopy.noMaterialValue }}</dd>
             </div>
             <div>
               <dt>{{ detailCopy.origin }}</dt>
@@ -270,8 +276,11 @@ onBeforeUnmount(() => {
             />
             <small>/ {{ maxActionAmount }}</small>
           </label>
-          <p v-if="detailNotice" class="detail-notice">{{ detailNotice }}</p>
         </section>
+
+        <p v-if="detailNotice || reservedActionNotice" class="detail-notice" aria-live="polite">
+          {{ detailNotice || reservedActionNotice }}
+        </p>
 
         <footer>
           <button type="button" :disabled="!canUseSelectedMaterial" @click="handleDetailAction(detailCopy.discard)">
@@ -331,31 +340,6 @@ onBeforeUnmount(() => {
     -1.4px 0 #fff7df,
     0 1px #fff7df,
     0 -1px #fff7df;
-}
-
-.wallet-coins {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 40px;
-  padding: 5px 12px;
-  color: #2f2018;
-  background: rgba(255, 241, 200, 0.88);
-  border: 3px solid #b97843;
-  border-radius: 999px;
-}
-
-.wallet-coins span {
-  width: 26px;
-  aspect-ratio: 1;
-  background: radial-gradient(circle at 35% 30%, #ffe58c 0 21%, #e9a73c 22% 58%, #a76820 59% 100%);
-  border: 2px solid #985e1f;
-  border-radius: 999px;
-}
-
-.wallet-coins strong {
-  font-size: 22px;
-  font-weight: 1000;
 }
 
 .inventory-shelf {
@@ -563,7 +547,7 @@ onBeforeUnmount(() => {
 
 .inventory-detail {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: .1fr auto .1fr;
   min-height: 0;
   overflow: hidden;
   color: #4d241d;
@@ -611,8 +595,7 @@ onBeforeUnmount(() => {
     'icon name'
     'icon copy'
     'meta meta'
-    'quantity quantity'
-    'notice notice';
+    'quantity quantity';
   align-content: start;
   gap: 9px 12px;
   min-height: 0;
@@ -763,11 +746,15 @@ onBeforeUnmount(() => {
 .detail-body p {
   grid-area: copy;
   max-width: none;
-  min-height: 0;
+  min-height: 68px;
+  padding: 6px 8px;
   color: #4b241d;
   font-size: 14px;
   font-weight: 900;
   line-height: 1.35;
+  overflow-wrap: anywhere;
+  background: rgba(200, 232, 158, 0.62);
+  border-radius: 6px;
 }
 
 .detail-body dl {
@@ -782,14 +769,18 @@ onBeforeUnmount(() => {
 }
 
 .detail-notice {
-  grid-area: notice;
-  min-height: 30px;
-  padding: 6px 8px;
+  align-self: end;
+  min-height: 44px;
+  margin: 10px 14px 0;
+  padding: 9px 10px;
   color: #26582b;
   font-size: 13px;
   font-weight: 1000;
+  line-height: 1.35;
   text-align: center;
+  overflow-wrap: anywhere;
   background: rgba(200, 232, 158, 0.62);
+  border: 2px solid rgba(111, 139, 65, 0.42);
   border-radius: 6px;
 }
 
@@ -974,19 +965,6 @@ onBeforeUnmount(() => {
 
   .inventory-header h1 {
     font-size: 22px;
-  }
-
-  .wallet-coins {
-    min-height: 34px;
-    padding: 3px 8px;
-  }
-
-  .wallet-coins span {
-    width: 19px;
-  }
-
-  .wallet-coins strong {
-    font-size: 14px;
   }
 
   .inventory-shelf {

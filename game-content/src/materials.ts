@@ -15,7 +15,6 @@ export interface MaterialDefinition {
   element: GoodieElement
   grade: GoodieGrade
   description: string
-  basePrice: number
 }
 
 export const materialDefinitions: MaterialDefinition[] = [
@@ -35,7 +34,6 @@ export const materialDefinitions: MaterialDefinition[] = [
     element: 2,
     grade: 'C',
     description: '帶有柑橘香氣的基礎素材，可用於水豚進階。',
-    basePrice: 35,
   },
   {
     id: 'MAT-4B',
@@ -48,7 +46,6 @@ export const materialDefinitions: MaterialDefinition[] = [
     element: 4,
     grade: 'B',
     description: '寒霧森林中取得的稀有素材，可用於高階培育。',
-    basePrice: 90,
   },
 ]
 

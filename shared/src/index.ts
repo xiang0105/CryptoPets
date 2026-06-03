@@ -53,6 +53,17 @@ export interface ExpeditionSummary {
   reward: ExpeditionReward | null
 }
 
+export interface ExpeditionLogEntry {
+  id: string
+  expeditionId: string | null
+  at: string
+  message: {
+    zh: string
+    en: string
+  }
+  variant: 'notice' | null
+}
+
 export interface StartExpeditionRequest {
   petIds: string[]
   expeditionType?: ExpeditionType
@@ -64,7 +75,7 @@ export interface ClaimRewardRequest {
 
 export interface ExpeditionReward {
   exp: number
-  coins: number
+  sepoliaAmount: string
   materials: Array<{
     id: string
     count: number
@@ -85,7 +96,7 @@ export interface InventoryItem {
 }
 
 export interface PlayerResources {
-  coins: number
+  sepoliaBalance: string
   inventory: InventoryItem[]
 }
 
@@ -133,7 +144,7 @@ export interface PlayerTransaction {
   action: TransactionAction
   materialId: string | null
   materialAmount: number | null
-  coinAmount: number
+  sepoliaAmount: string
   createdAt: string
 }
 

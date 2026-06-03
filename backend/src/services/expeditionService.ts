@@ -1,7 +1,22 @@
 import crypto from 'node:crypto'
 import { z } from 'zod'
-import type { ClaimRewardRequest, ExpeditionReward, ExpeditionSummary, StartExpeditionRequest } from '@cryptopets/shared'
-import { expeditionForests, materialIds, type ForestId } from '@cryptopets/game-content'
+import type {
+  ClaimRewardRequest,
+  ExpeditionLogEntry,
+  ExpeditionReward,
+  ExpeditionSummary,
+  StartExpeditionRequest,
+} from '@cryptopets/shared'
+import {
+  expeditionForests,
+  materialDefinitions,
+  materialIds,
+  type ForestId,
+  type PetElement,
+  type StoryBeat,
+  type StoryCheckOperator,
+  type StoryCondition,
+} from '@cryptopets/game-content'
 import { supabase } from '../config/supabase.js'
 import { HttpError } from '../utils/httpError.js'
 import { materialBalanceProvider } from './materialBalanceProvider.js'
@@ -9,13 +24,31 @@ import { materialBalanceProvider } from './materialBalanceProvider.js'
 const startExpeditionSchema: z.ZodType<StartExpeditionRequest> = z.object({
   petIds: z.array(z.string().uuid()).min(1).max(4),
   expeditionType: z.enum(expeditionForests.map((forest) => forest.id) as ['orange', 'apple', 'snow-peach']).default('orange'),
-})
+}).strict()
 
 const claimRewardSchema: z.ZodType<ClaimRewardRequest> = z.object({
   expeditionId: z.string().uuid(),
-})
+}).strict()
 
 const expeditionForestById = new Map(expeditionForests.map((forest) => [forest.id, forest]))
+const materialDefinitionById = new Map(materialDefinitions.map((material) => [material.id, material]))
+
+type ExpeditionPetForLog = {
+  id: string
+  name: string
+  element: PetElement
+  stats: Record<string, number>
+  stage: number
+}
+
+type ExpeditionLogInsert = {
+  user_id: string
+  expedition_id: string
+  occurred_at: string
+  message_zh: string
+  message_en: string
+  variant?: 'notice' | null
+}
 
 export async function startExpedition(userId: string, input: unknown): Promise<ExpeditionSummary> {
   const body = startExpeditionSchema.parse(input)
@@ -42,7 +75,7 @@ export async function startExpedition(userId: string, input: unknown): Promise<E
 
   const { data: pets, error: petsError } = await supabase
     .from('pets')
-    .select('id,stats,stage')
+    .select('id,name,element,stats,stage')
     .eq('user_id', userId)
     .in('id', uniquePetIds)
 
@@ -75,6 +108,8 @@ export async function startExpedition(userId: string, input: unknown): Promise<E
   if (error || !expedition) {
     throw new HttpError(500, 'EXPEDITION_CREATE_FAILED')
   }
+
+  await createExpeditionLogs(userId, expedition.id, expedition, pets ?? [])
 
   return {
     id: expedition.id,
@@ -131,6 +166,7 @@ export async function claimReward(userId: string, input: unknown): Promise<Exped
 
   await applyPetExp(userId, expedition.pet_ids, reward.exp)
   await applyPlayerReward(userId, updated.id, reward)
+  await createRewardLog(userId, updated.id, reward)
 
   return {
     id: updated.id,
@@ -141,6 +177,33 @@ export async function claimReward(userId: string, input: unknown): Promise<Exped
     status: updated.status,
     reward: updated.reward,
   }
+}
+
+export async function getExpeditionLogs(userId: string): Promise<ExpeditionLogEntry[]> {
+  const { data, error } = await supabase
+    .from('expedition_logs')
+    .select('id,expedition_id,occurred_at,message_zh,message_en,variant')
+    .eq('user_id', userId)
+    .lte('occurred_at', new Date().toISOString())
+    .order('occurred_at', { ascending: false })
+    .limit(50)
+
+  if (error) {
+    throw new HttpError(500, 'EXPEDITION_LOGS_LOOKUP_FAILED')
+  }
+
+  return (data ?? [])
+    .map((log) => ({
+      id: log.id,
+      expeditionId: log.expedition_id,
+      at: log.occurred_at,
+      message: {
+        zh: log.message_zh,
+        en: log.message_en,
+      },
+      variant: log.variant,
+    }))
+    .sort((logA, logB) => Date.parse(logA.at) - Date.parse(logB.at))
 }
 
 function calculateReward(
@@ -157,13 +220,12 @@ function calculateReward(
   const variance = seed[0] % 31
   return {
     exp: 80 + petIds.length * 20 + variance,
-    coins: 40 + petIds.length * 15 + (seed[1] % 21),
+    sepoliaAmount: '0.00000000001',
     materials: [{ id: materialIds[seed[2] % materialIds.length] ?? 'MAT-2C', count: 1 + (seed[3] % 2) }],
   }
 }
 
 async function applyPlayerReward(userId: string, expeditionId: string, reward: ExpeditionReward) {
-  await addCoins(userId, reward.coins)
   await Promise.all(
     reward.materials.map((material) => materialBalanceProvider.increase(userId, material.id, material.count)),
   )
@@ -172,10 +234,11 @@ async function applyPlayerReward(userId: string, expeditionId: string, reward: E
     user_id: userId,
     action: 'reward',
     listing_id: null,
-    coin_amount: reward.coins,
+    coin_amount: 0,
     metadata: {
       expeditionId,
       exp: reward.exp,
+      sepoliaAmount: reward.sepoliaAmount,
       materials: reward.materials,
     },
   })
@@ -185,27 +248,203 @@ async function applyPlayerReward(userId: string, expeditionId: string, reward: E
   }
 }
 
-async function addCoins(userId: string, coins: number) {
-  const { data: currency, error: lookupError } = await supabase
-    .from('currencies')
-    .select('coins')
-    .eq('user_id', userId)
-    .maybeSingle()
+async function createExpeditionLogs(
+  userId: string,
+  expeditionId: string,
+  expedition: {
+    expedition_type: ForestId
+    started_at: string
+    ends_at: string
+  },
+  pets: ExpeditionPetForLog[],
+) {
+  const forest = expeditionForestById.get(expedition.expedition_type)
 
-  if (lookupError) {
-    throw new HttpError(500, 'CURRENCY_LOOKUP_FAILED')
+  if (!forest) {
+    return
   }
 
-  const nextCoins = (currency?.coins ?? 0) + coins
-  const { error } = await supabase.from('currencies').upsert({
+  const startedAt = new Date(expedition.started_at).getTime()
+  const finishAt = new Date(expedition.ends_at).getTime()
+  const durationSeconds = Math.max(1, (finishAt - startedAt) / 1000)
+  const eventGap = durationSeconds / (forest.scriptEvents.length + 1)
+  const teamPower = calculateTeamPower(pets)
+  const teamNamesZh = pets.map((pet) => pet.name).join('、') || '水豚隊'
+  const teamNamesEn = pets.map((pet) => pet.name).join(', ') || 'Capybara Team'
+  const firstLog: ExpeditionLogInsert = {
     user_id: userId,
-    coins: nextCoins,
-    updated_at: new Date().toISOString(),
+    expedition_id: expeditionId,
+    occurred_at: expedition.started_at,
+    message_zh: `${teamNamesZh} 選擇${forest.name.zh}劇本。隊伍評分 ${teamPower}，難度 ${forest.difficulty}。${abilityNoteZh(teamPower, forest.difficulty)}`,
+    message_en: `${teamNamesEn} chose the ${forest.name.en} script. Team score ${teamPower}, difficulty ${forest.difficulty}. ${abilityNoteEn(teamPower, forest.difficulty)}`,
+    variant: null,
+  }
+  const storyLogs = forest.scriptEvents.map((event, index) => {
+    const message = storyBeatMessage(event, pets, `${expeditionId}:${index}`)
+
+    return {
+      user_id: userId,
+      expedition_id: expeditionId,
+      occurred_at: new Date(startedAt + Math.round(eventGap * (index + 1) * 1000)).toISOString(),
+      message_zh: message.zh,
+      message_en: message.en,
+      variant: null,
+    } satisfies ExpeditionLogInsert
+  })
+  const finishLog: ExpeditionLogInsert = {
+    user_id: userId,
+    expedition_id: expeditionId,
+    occurred_at: expedition.ends_at,
+    message_zh: `${forest.name.zh}劇本完成，遠征隊帶回 ${forest.reward}。`,
+    message_en: `${forest.name.en} script completed. The party returned with ${forest.reward}.`,
+    variant: null,
+  }
+
+  const { error } = await supabase.from('expedition_logs').insert([firstLog, ...storyLogs, finishLog])
+
+  if (error) {
+    throw new HttpError(500, 'EXPEDITION_LOG_CREATE_FAILED')
+  }
+}
+
+async function createRewardLog(userId: string, expeditionId: string, reward: ExpeditionReward) {
+  const materialsZh = reward.materials.map((material) => `${materialLabel(material.id, 'zh')} x${material.count}`)
+  const materialsEn = reward.materials.map((material) => `${materialLabel(material.id, 'en')} x${material.count}`)
+  const rewardsZh = [`${reward.sepoliaAmount} Sepolia`, `${reward.exp} EXP`, ...materialsZh]
+  const rewardsEn = [`${reward.sepoliaAmount} Sepolia`, `${reward.exp} EXP`, ...materialsEn]
+
+  const { error } = await supabase.from('expedition_logs').insert({
+    user_id: userId,
+    expedition_id: expeditionId,
+    occurred_at: new Date().toISOString(),
+    message_zh: `後端已確認遠征獎勵：${rewardsZh.join('、')}。`,
+    message_en: `Backend reward confirmed: ${rewardsEn.join(', ')}.`,
+    variant: 'notice',
   })
 
   if (error) {
-    throw new HttpError(500, 'CURRENCY_UPDATE_FAILED')
+    throw new HttpError(500, 'EXPEDITION_LOG_CREATE_FAILED')
   }
+}
+
+function calculateTeamPower(pets: ExpeditionPetForLog[]) {
+  const total = pets.reduce(
+    (sum, pet) => sum + numberStat(pet, 'hp') + numberStat(pet, 'atk') * 1.4 + numberStat(pet, 'def') * 1.2 + pet.stage * 12,
+    0,
+  )
+
+  return Math.round(total / Math.max(1, pets.length))
+}
+
+function numberStat(pet: ExpeditionPetForLog, key: string) {
+  const value = pet.stats[key]
+  return typeof value === 'number' ? value : 0
+}
+
+function abilityNoteZh(power: number, difficulty: number) {
+  const requiredPower = 185 + difficulty * 35
+
+  if (power >= requiredPower) {
+    return '隊伍能力高於路線需求，劇本結算偏穩定。'
+  }
+
+  if (power >= requiredPower - 30) {
+    return '隊伍能力接近路線需求，需要留意突發事件。'
+  }
+
+  return '隊伍能力低於路線需求，遠征風險偏高。'
+}
+
+function abilityNoteEn(power: number, difficulty: number) {
+  const requiredPower = 185 + difficulty * 35
+
+  if (power >= requiredPower) {
+    return 'The party is stronger than this route requires, so the script should resolve steadily.'
+  }
+
+  if (power >= requiredPower - 30) {
+    return 'The party is close to the route requirement and should watch for surprises.'
+  }
+
+  return 'The party is below the route requirement, so this expedition is risky.'
+}
+
+function storyBeatMessage(event: StoryBeat, pets: ExpeditionPetForLog[], seed: string) {
+  const outcome = event.outcomes.find((entry, index) => storyConditionMatches(entry.condition, pets, `${seed}:${index}`)) ?? event.outcomes[0]
+
+  return {
+    zh: outcome ? `${event.setup.zh} ${outcome.text.zh}` : event.setup.zh,
+    en: outcome ? `${event.setup.en} ${outcome.text.en}` : event.setup.en,
+  }
+}
+
+function storyConditionMatches(condition: StoryCondition | undefined, pets: ExpeditionPetForLog[], seed: string) {
+  if (!condition) {
+    return true
+  }
+
+  const leader = pets[0]
+
+  if (condition.leaderElement && leader?.element !== condition.leaderElement) {
+    return false
+  }
+
+  if (condition.teamPetName && !pets.some((pet) => pet.name === condition.teamPetName)) {
+    return false
+  }
+
+  if (typeof condition.chancePercent === 'number' && chanceValue(seed) >= condition.chancePercent) {
+    return false
+  }
+
+  if (condition.metric && condition.operator && typeof condition.value === 'number') {
+    return compareStoryValue(teamMetricValue(pets, condition.metric), condition.operator, condition.value)
+  }
+
+  return true
+}
+
+function chanceValue(seed: string) {
+  return crypto.createHash('sha256').update(seed).digest()[0] % 100
+}
+
+function teamMetricValue(pets: ExpeditionPetForLog[], metric: NonNullable<StoryCondition['metric']>) {
+  if (metric === 'teamPower') {
+    return Math.round(
+      pets.reduce((sum, pet) => sum + numberStat(pet, 'hp') + numberStat(pet, 'atk') * 1.4 + numberStat(pet, 'def') * 1.2 + pet.stage * 12, 0),
+    )
+  }
+
+  if (metric === 'teamHp') {
+    return pets.reduce((sum, pet) => sum + numberStat(pet, 'hp'), 0)
+  }
+
+  if (metric === 'teamAtk') {
+    return pets.reduce((sum, pet) => sum + numberStat(pet, 'atk'), 0)
+  }
+
+  return pets.reduce((sum, pet) => sum + numberStat(pet, 'def'), 0)
+}
+
+function compareStoryValue(actual: number, operator: StoryCheckOperator, expected: number) {
+  if (operator === 'gt') {
+    return actual > expected
+  }
+
+  if (operator === 'lte') {
+    return actual <= expected
+  }
+
+  if (operator === 'lt') {
+    return actual < expected
+  }
+
+  return actual >= expected
+}
+
+function materialLabel(materialId: string, locale: 'zh' | 'en') {
+  const material = materialDefinitionById.get(materialId)
+  return material ? material.name[locale] : materialId
 }
 
 async function applyPetExp(userId: string, petIds: string[], exp: number) {
