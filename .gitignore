@@ -60,3 +60,11 @@ __screenshots__/
 
 # Vite
 *.timestamp-*-*.mjs
+
+# Foundry
+out/
+cache/
+broadcast/
+contracts/out/
+contracts/cache/
+contracts/broadcast/
