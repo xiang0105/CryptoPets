@@ -15,6 +15,8 @@ export interface PlayerPet {
   tokenId: string
   contractAddress: WalletAddress
   chainId: number
+  basePetId: string
+  skinId: number
   name: string
   element: PetElement
   stage: number

@@ -91,7 +91,7 @@ export async function loginWithSignature(input: unknown): Promise<AuthLoginRespo
     audience: 'cryptopets-frontend',
   })
 
-  await initializePlayerIfNeeded(user.id)
+  await initializePlayerIfNeeded(user.id, normalizedWallet as `0x${string}`)
 
   return {
     token,

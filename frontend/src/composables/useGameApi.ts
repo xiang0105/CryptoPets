@@ -192,6 +192,8 @@ function mapPlayerPet(pet: PlayerProfile['pets'][number]): Pet {
     stage: pet.stage,
     level: Math.max(0, Math.floor(pet.exp.current / Math.max(1, pet.exp.next))),
     tokenURI: pet.tokenUri,
+    basePetId: pet.basePetId,
+    skinId: pet.skinId,
     stats: { ...pet.stats },
     profile: contentPet ? { ...contentPet.profile } : undefined,
     leaderSkill: contentPet ? { ...contentPet.leaderSkill } : undefined,
