@@ -16,7 +16,7 @@ export interface GoodieSft {
   status: ListingStatus
 }
 
-// Keep this local cache empty until it is hydrated from wallet-owned on-chain SFTs.
+// Backend API is the source of truth. This cache is only a view model store.
 export const goodies: GoodieSft[] = []
 
 export function replaceGoodies(nextGoodies: GoodieSft[]) {

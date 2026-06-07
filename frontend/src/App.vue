@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import MarkdownIt from 'markdown-it'
 import { currentMessages, locale, toggleLocale } from './i18n'
+import { useGameApi } from '@/composables/useGameApi'
 import { useWallet } from '@/composables/useWallet'
-import { createStarterPets, replacePets } from '@/data/pets'
+import { pets } from '@/data/pets'
 import { setExpeditionTeam } from '@/state/expeditionTeam'
-import { resetTestProgress } from '@/state/testProgress'
 import { capybaraImageBySlug } from '@/content/gameAssets'
 import { starterCapybaras } from '@cryptopets/game-content'
 import logoUrl from '@game-content/assets/branding/logo.png'
@@ -39,7 +39,24 @@ const isLoginConfirmed = ref(false)
 const isStarterGiftOpen = ref(false)
 const loginNotice = ref('')
 const backgroundMusic = ref<HTMLAudioElement | null>(null)
-const { walletAddress, walletError, shortWalletAddress, connectWallet, restoreSession } = useWallet()
+const {
+  walletAddress,
+  walletError,
+  walletNotice,
+  player,
+  isAuthenticating,
+  isSessionAuthenticated,
+  isSupportedChain,
+  shortWalletAddress,
+  walletSessionVersion,
+  walletResetReason,
+  connectWallet,
+  restoreSession,
+  syncChainId,
+  registerWalletEvents,
+  unregisterWalletEvents,
+} = useWallet()
+const { loadAllApiData } = useGameApi()
 const route = useRoute()
 const router = useRouter()
 const slideDirection = ref<'left' | 'right'>('left')
@@ -50,13 +67,12 @@ const markdown = new MarkdownIt({
   linkify: true,
   typographer: true,
 })
-
 const renderedReadme = computed(() => markdown.render(currentMessages.value.app.help.markdown))
 
 const musicButtonIcon = computed(() => (isMusicPlaying.value ? 'music' : 'volume-xmark'))
 
 const visibleActionItems = computed(() => actionItems.value)
-const canConfirmLogin = computed(() => Boolean(walletAddress.value))
+const canConfirmLogin = computed(() => isSessionAuthenticated.value && isSupportedChain.value && !isAuthenticating.value)
 const walletInputPlaceholder = computed(() => walletError.value || currentMessages.value.app.login.walletPlaceholder)
 
 const currentPageIndex = computed(() => {
@@ -134,7 +150,7 @@ function handleAction(icon: string) {
 }
 
 async function startLoginFlow() {
-  if (walletAddress.value) {
+  if (isSessionAuthenticated.value) {
     loginNotice.value = currentMessages.value.app.login.walletDetected
     return
   }
@@ -149,36 +165,50 @@ async function startLoginFlow() {
   }
 }
 
-function confirmLogin() {
+async function confirmLogin() {
   if (!canConfirmLogin.value) {
     return
   }
 
   isLoginConfirmed.value = true
-  grantTestingStarterPets()
+  await loadAllApiData({ force: true })
+  setExpeditionTeam(pets.map((pet) => pet.id))
+  isStarterGiftOpen.value = pets.length > 0
+
   void playBackgroundMusic()
-}
-
-function grantTestingStarterPets() {
-  const starterPets = createStarterPets(walletAddress.value)
-
-  resetTestProgress()
-  replacePets(starterPets)
-  setExpeditionTeam(starterPets.map((pet) => pet.id))
-  isStarterGiftOpen.value = true
 }
 
 function closeStarterGift() {
   isStarterGiftOpen.value = false
 }
 
+watch(walletSessionVersion, () => {
+  isLoginConfirmed.value = false
+  isStarterGiftOpen.value = false
+  loginNotice.value = walletNotice.value || walletError.value || currentMessages.value.app.login.walletFailed
+
+  if (
+    walletResetReason.value === 'accountChanged' ||
+    (walletResetReason.value === 'chainChanged' && isSupportedChain.value)
+  ) {
+    void startLoginFlow()
+  }
+})
+
 onMounted(async () => {
+  registerWalletEvents()
+  await syncChainId().catch(() => undefined)
   await restoreSession()
-  void startLoginFlow()
+  if (!player.value) {
+    void startLoginFlow()
+  } else {
+    loginNotice.value = currentMessages.value.app.login.walletDetected
+  }
   void playBackgroundMusic()
 })
 
 onBeforeUnmount(() => {
+  unregisterWalletEvents()
   window.removeEventListener('pointerdown', playBackgroundMusicOnInteraction)
 })
 </script>

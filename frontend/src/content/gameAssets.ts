@@ -25,6 +25,14 @@ export const petImages: Record<string, string> = Object.fromEntries(
   }),
 ) as Record<string, string>
 
+export const capybaraImageByName: Record<string, string> = Object.fromEntries(
+  starterCapybaras.map((pet) => [pet.name, capybaraImageBySlug[pet.slug]]),
+) as Record<string, string>
+
+export function getPetImage(pet: { id: string; name: string }) {
+  return petImages[pet.id] ?? capybaraImageByName[pet.name] ?? capybaraImageBySlug['capy-san']
+}
+
 export const yuzuBiteFrames = [yuzuBiteOne, yuzuBiteTwo, yuzuBiteThree, yuzuBiteFour]
 
 export const marketCapybaraSprites = [

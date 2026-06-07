@@ -31,24 +31,51 @@ export interface PlayerProfile {
   id: string
   wallet: WalletAddress
   username: string | null
+  chain: {
+    enabled: boolean
+    chainId: number
+    nftContractAddress: WalletAddress | null
+  }
   pets: PlayerPet[]
   activeExpedition: ExpeditionSummary | null
 }
 
 export type ExpeditionStatus = 'started' | 'claimed' | 'cancelled'
+export type ExpeditionType = 'orange' | 'apple' | 'snow-peach'
 
 export interface ExpeditionSummary {
   id: string
   petIds: string[]
+  expeditionType: ExpeditionType
   startedAt: string
   endsAt: string
   status: ExpeditionStatus
   reward: ExpeditionReward | null
 }
 
+export interface ExpeditionLogEntry {
+  id: string
+  expeditionId: string | null
+  at: string
+  message: {
+    zh: string
+    en: string
+  }
+  variant: 'notice' | null
+}
+
+export interface StartExpeditionRequest {
+  petIds: string[]
+  expeditionType?: ExpeditionType
+}
+
+export interface ClaimRewardRequest {
+  expeditionId: string
+}
+
 export interface ExpeditionReward {
   exp: number
-  coins: number
+  sepoliaAmount: string
   materials: Array<{
     id: string
     count: number
@@ -69,7 +96,7 @@ export interface InventoryItem {
 }
 
 export interface PlayerResources {
-  coins: number
+  sepoliaBalance: string
   inventory: InventoryItem[]
 }
 
@@ -100,6 +127,16 @@ export interface MarketListing {
   updatedAt: string
 }
 
+export interface ListMarketMaterialRequest {
+  materialId: string
+  amount: number
+  price: number
+}
+
+export interface ListingIdRequest {
+  listingId: string
+}
+
 export type TransactionAction = 'reward' | 'list' | 'buy' | 'sell' | 'cancel' | 'upgrade' | 'advance'
 
 export interface PlayerTransaction {
@@ -107,7 +144,7 @@ export interface PlayerTransaction {
   action: TransactionAction
   materialId: string | null
   materialAmount: number | null
-  coinAmount: number
+  sepoliaAmount: string
   createdAt: string
 }
 
@@ -120,4 +157,8 @@ export interface AuthNonceResponse {
 export interface AuthLoginResponse {
   token: string
   player: PlayerProfile
+}
+
+export interface AddFriendRequest {
+  wallet: string
 }

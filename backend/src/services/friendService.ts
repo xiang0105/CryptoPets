@@ -1,11 +1,11 @@
 import { z } from 'zod'
-import type { FriendSummary } from '@cryptopets/shared'
+import type { AddFriendRequest, FriendSummary } from '@cryptopets/shared'
 import { supabase } from '../config/supabase.js'
 import { HttpError } from '../utils/httpError.js'
 
-const addFriendSchema = z.object({
+const addFriendSchema: z.ZodType<AddFriendRequest> = z.object({
   wallet: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
-})
+}).strict()
 
 export async function addFriend(userId: string, input: unknown) {
   const body = addFriendSchema.parse(input)

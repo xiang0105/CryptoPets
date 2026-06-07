@@ -1,18 +1,16 @@
 ﻿<script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import type { ExpeditionLogEntry as ApiExpeditionLogEntry, ExpeditionSummary } from '@cryptopets/shared'
 import { pets, type Pet } from '@/data/pets'
+import { useGameApi } from '@/composables/useGameApi'
 import { expeditionTeamPets } from '@/state/expeditionTeam'
-import { grantSkillPoints } from '@/state/testProgress'
-import { petImages, yuzuBiteFrames } from '@/content/gameAssets'
+import { getPetImage, yuzuBiteFrames } from '@/content/gameAssets'
 import orangeMap from '@game-content/assets/maps/orange.png'
 import { currentMessages, isZh } from '@/i18n'
 import {
   expeditionForests,
   petElementMeta,
   type ExpeditionForest,
-  type StoryBeat,
-  type StoryCheckOperator,
-  type StoryCondition,
 } from '@cryptopets/game-content'
 
 const elementMeta = petElementMeta
@@ -20,6 +18,18 @@ const elementMeta = petElementMeta
 const text = computed(() => ({
   ...currentMessages.value.home,
 }))
+const {
+  operationError,
+  operationLoading,
+  queryError,
+  queryLoading,
+  activeExpedition: apiActiveExpedition,
+  expeditionLogs: apiExpeditionLogs,
+  loadPlayerProfile,
+  loadExpeditionLogs,
+  claimActiveExpedition,
+  startTeamExpedition,
+} = useGameApi()
 
 const fruitFrames = yuzuBiteFrames
 type ForestId = ExpeditionForest['id']
@@ -33,22 +43,21 @@ interface ExpeditionLogEntry {
 
 interface ExpeditionRecord {
   id: ForestId
+  apiId?: string
   startedAt: number
   finishAt: number
-  logs: ExpeditionLogEntry[]
 }
 
-const expeditionStorageKey = 'crypto-pets-local-expedition'
-const expeditionHistoryStorageKey = 'crypto-pets-local-expedition-history'
 const forestOptions: ForestOption[] = expeditionForests
 
 const fruitFrameIndex = ref(0)
 const logLinesElement = ref<HTMLElement | null>(null)
 const now = ref(Date.now())
 const activeExpedition = ref<ExpeditionRecord | null>(loadStoredExpedition())
-const expeditionHistory = ref<ExpeditionLogEntry[]>(loadStoredExpeditionHistory())
+const lastSelectedForest = ref<ForestOption | null>(null)
 let fruitTimer: number | undefined
 let clockTimer: number | undefined
+let logRefreshTimer: number | undefined
 let fruitCycleStarted = 0
 const fruitCycleDuration = 12800
 
@@ -75,7 +84,8 @@ const remainingTime = computed(() => {
     return text.value.ready
   }
 
-  const seconds = Math.max(0, Math.ceil((activeExpedition.value.finishAt - now.value) / 1000))
+  const nextAt = activeExpedition.value.finishAt
+  const seconds = Math.max(0, Math.ceil((nextAt - now.value) / 1000))
   const minutes = Math.floor(seconds / 60)
   const restSeconds = seconds % 60
 
@@ -101,12 +111,7 @@ const currentStatusTitle = computed(() => {
     : `${selectedForest.value.name.en} started`
 })
 const visibleLogEntries = computed(() => {
-  const activeLogs = activeExpedition.value?.logs.filter((log) => log.at <= now.value) ?? []
-
-  return [...activeLogs, ...expeditionHistory.value]
-    .sort((logA, logB) => logB.at - logA.at)
-    .slice(0, 24)
-    .sort((logA, logB) => logA.at - logB.at)
+  return apiExpeditionLogs.value.map(mapApiLog)
 })
 
 function scrollLogToLatest() {
@@ -140,21 +145,11 @@ function displayForestSummary(forest: ForestOption) {
 }
 
 function loadStoredExpedition(): ExpeditionRecord | null {
-  window.localStorage.removeItem(expeditionStorageKey)
   return null
-}
-
-function loadStoredExpeditionHistory() {
-  window.localStorage.removeItem(expeditionHistoryStorageKey)
-  return []
 }
 
 function saveStoredExpedition(record: ExpeditionRecord | null) {
   void record
-}
-
-function saveStoredExpeditionHistory(entries: ExpeditionLogEntry[]) {
-  void entries
 }
 
 function formatLogTime(timestamp: number) {
@@ -167,167 +162,135 @@ function formatLogTime(timestamp: number) {
   return `${month}/${day} ${hours}:${minutes}`
 }
 
+function displayLogEntry(log: ExpeditionLogEntry) {
+  return log.variant === 'notice' ? log.message : `${formatLogTime(log.at)}　${log.message}`
+}
+
+function mapApiLog(log: ApiExpeditionLogEntry): ExpeditionLogEntry {
+  return {
+    at: new Date(log.at).getTime(),
+    message: isZh.value ? log.message.zh : log.message.en,
+    variant: log.variant ?? undefined,
+  }
+}
+
 function petLevel(pet: Pet) {
   return pet.level
-}
-
-function incrementExpeditionTeamLevels() {
-  const teamIds = new Set(expeditionTeamPets.value.map((pet) => pet.id))
-  let levelUps = 0
-
-  pets.forEach((pet) => {
-    if (teamIds.has(pet.id)) {
-      pet.level += 1
-      levelUps += 1
-      pet.exp.current = pet.level
-      pet.exp.next = Math.max(pet.exp.next, pet.level + 1)
-    }
-  })
-
-  grantSkillPoints(levelUps)
-}
-
-function abilityNote(forest: ForestOption) {
-  const power = teamPower.value
-  const requiredPower = 185 + forest.difficulty * 35
-
-  if (power >= requiredPower) {
-    return text.value.routeStrong
-  }
-
-  if (power >= requiredPower - 30) {
-    return text.value.routeSteady
-  }
-
-  return text.value.routeWeak
 }
 
 function currentExpeditionTeam() {
   return expeditionTeamPets.value.length > 0 ? expeditionTeamPets.value : pets
 }
 
-function teamMetricValue(metric: NonNullable<StoryCondition['metric']>) {
-  const team = currentExpeditionTeam()
+function expeditionRecordFromSummary(summary: ExpeditionSummary): ExpeditionRecord | null {
+  const forest = forestOptions.find((entry) => entry.id === summary.expeditionType)
 
-  if (metric === 'teamPower') {
-    return Math.round(team.reduce((sum, pet) => sum + pet.stats.hp + pet.stats.atk * 1.4 + pet.stats.def * 1.2 + pet.stage * 12, 0))
+  if (!forest) {
+    return null
   }
 
-  if (metric === 'teamHp') {
-    return team.reduce((sum, pet) => sum + pet.stats.hp, 0)
+  const startedAt = new Date(summary.startedAt).getTime()
+  const finishAt = new Date(summary.endsAt).getTime()
+
+  if (!Number.isFinite(startedAt) || !Number.isFinite(finishAt)) {
+    return null
   }
 
-  if (metric === 'teamAtk') {
-    return team.reduce((sum, pet) => sum + pet.stats.atk, 0)
+  return {
+    id: forest.id,
+    apiId: summary.id,
+    startedAt,
+    finishAt,
   }
-
-  return team.reduce((sum, pet) => sum + pet.stats.def, 0)
 }
 
-function compareStoryValue(actual: number, operator: StoryCheckOperator, expected: number) {
-  if (operator === 'gt') {
-    return actual > expected
-  }
+const expeditionStatusError = computed(() => queryError.player || operationError.startExpedition || operationError.claimReward)
+const isExpeditionStatusLoading = computed(() => queryLoading.player || operationLoading.startExpedition || operationLoading.claimReward)
 
-  if (operator === 'lte') {
-    return actual <= expected
-  }
-
-  if (operator === 'lt') {
-    return actual < expected
-  }
-
-  return actual >= expected
-}
-
-function storyConditionMatches(condition?: StoryCondition) {
-  if (!condition) {
-    return true
-  }
-
-  const leader = currentExpeditionTeam()[0]
-
-  if (condition.leaderElement && leader?.element !== condition.leaderElement) {
-    return false
-  }
-
-  if (condition.metric && condition.operator && typeof condition.value === 'number') {
-    return compareStoryValue(teamMetricValue(condition.metric), condition.operator, condition.value)
-  }
-
-  return true
-}
-
-function storyBeatMessage(event: StoryBeat) {
-  const outcome = event.outcomes.find((entry) => storyConditionMatches(entry.condition)) ?? event.outcomes[0]
-  const setup = isZh.value ? event.setup.zh : event.setup.en
-  const result = outcome ? (isZh.value ? outcome.text.zh : outcome.text.en) : ''
-
-  return result ? `${setup} ${result}` : setup
-}
-
-function buildExpeditionLogs(forest: ForestOption, startedAt: number): ExpeditionLogEntry[] {
-  const teamNames = expeditionTeamPets.value.map((pet) => pet.name).join('、') || 'Capybara Team'
-  const eventGap = forest.durationSeconds / (forest.scriptEvents.length + 1)
-  const firstEntry = {
-    at: startedAt,
-    message: isZh.value
-      ? `${teamNames} 選擇${forest.name.zh}劇本。隊伍評分 ${teamPower.value}，難度 ${forest.difficulty}。${abilityNote(forest)}`
-      : `${teamNames} chose the ${forest.name.en} script. Team score ${teamPower.value}, difficulty ${forest.difficulty}. ${abilityNote(forest)}`,
-  }
-  const scriptEntries = forest.scriptEvents.map((event, index) => ({
-    at: startedAt + Math.round(eventGap * (index + 1) * 1000),
-    message: storyBeatMessage(event),
-  }))
-  const finishEntry = {
-    at: startedAt + forest.durationSeconds * 1000,
-    message: isZh.value
-      ? `${forest.name.zh}劇本完成，遠征隊帶回 ${forest.reward}。`
-      : `${forest.name.en} script completed. The party returned with ${forest.reward}.`,
-  }
-
-  return [firstEntry, ...scriptEntries, finishEntry]
-}
-
-function startExpedition(forest: ForestOption) {
+async function startExpedition(forest: ForestOption) {
   if (activeExpedition.value) {
     return
   }
 
-  const startedAt = Date.now()
-  const record: ExpeditionRecord = {
-    id: forest.id,
-    startedAt,
-    finishAt: startedAt + forest.durationSeconds * 1000,
-    logs: buildExpeditionLogs(forest, startedAt),
+  lastSelectedForest.value = forest
+  const teamPetIds = currentExpeditionTeam().map((pet) => pet.id)
+  let apiSummary
+
+  try {
+    apiSummary = await startTeamExpedition(teamPetIds, forest.id)
+  } catch {
+    return
+  }
+
+  const record = expeditionRecordFromSummary(apiSummary)
+
+  if (record) {
+    activeExpedition.value = record
+    saveStoredExpedition(record)
+    now.value = Date.now()
+    await loadExpeditionLogs({ force: true }).catch(() => undefined)
+  }
+}
+
+async function retryStartExpedition() {
+  if (!lastSelectedForest.value) {
+    return
+  }
+
+  await startExpedition(lastSelectedForest.value)
+}
+
+async function syncActiveExpeditionFromApi() {
+  try {
+    await loadPlayerProfile()
+  } catch {
+    return
+  }
+
+  const summary = apiActiveExpedition.value
+
+  if (!summary) {
+    return
+  }
+
+  const record = expeditionRecordFromSummary(summary)
+
+  if (!record) {
+    return
   }
 
   activeExpedition.value = record
-  saveStoredExpedition(record)
+  saveStoredExpedition(activeExpedition.value)
+  now.value = Date.now()
 }
 
-function completeExpedition() {
+async function completeExpedition() {
   if (!activeExpedition.value || !isExpeditionComplete.value || !selectedForest.value) {
     return
   }
 
-  expeditionHistory.value = [...activeExpedition.value.logs, ...expeditionHistory.value]
-    .sort((logA, logB) => logB.at - logA.at)
-    .slice(0, 24)
-    .sort((logA, logB) => logA.at - logB.at)
-  incrementExpeditionTeamLevels()
-  saveStoredExpeditionHistory(expeditionHistory.value)
+  if (activeExpedition.value.apiId) {
+    try {
+      await claimActiveExpedition(activeExpedition.value.apiId)
+      await loadExpeditionLogs({ force: true }).catch(() => undefined)
+    } catch {
+      return
+    }
+  }
+
   activeExpedition.value = null
   saveStoredExpedition(null)
 }
 
 function syncCompletedExpedition() {
   if (activeExpedition.value && Date.now() >= activeExpedition.value.finishAt) {
-    completeExpedition()
+    now.value = Date.now()
   }
 }
 
 onMounted(() => {
+  void syncActiveExpeditionFromApi()
+  void loadExpeditionLogs().catch(() => undefined)
   syncCompletedExpedition()
   scrollLogToLatest()
   fruitCycleStarted = performance.now()
@@ -337,6 +300,11 @@ onMounted(() => {
     now.value = Date.now()
     syncCompletedExpedition()
   }, 1000)
+  logRefreshTimer = window.setInterval(() => {
+    if (activeExpedition.value) {
+      void loadExpeditionLogs({ force: true }).catch(() => undefined)
+    }
+  }, 5000)
 })
 
 watch(
@@ -352,6 +320,9 @@ onUnmounted(() => {
   }
   if (clockTimer) {
     window.clearInterval(clockTimer)
+  }
+  if (logRefreshTimer) {
+    window.clearInterval(logRefreshTimer)
   }
 })
 </script>
@@ -386,6 +357,7 @@ onUnmounted(() => {
               class="forest-choice"
               :class="`forest-${forest.id}`"
               type="button"
+              :disabled="isExpeditionStatusLoading"
               @click="startExpedition(forest)"
             >
               <strong>{{ displayForestName(forest) }}</strong>
@@ -393,6 +365,12 @@ onUnmounted(() => {
               <small>Lv. {{ forest.difficulty }} · {{ forest.durationSeconds }}s · {{ forest.reward }}</small>
               <b>{{ text.start }}</b>
             </button>
+            <div v-if="expeditionStatusError" class="expedition-api-state" aria-live="polite">
+              <strong>{{ expeditionStatusError }}</strong>
+              <button type="button" :disabled="isExpeditionStatusLoading || !lastSelectedForest" @click="retryStartExpedition">
+                {{ isZh ? '重試' : 'Retry' }}
+              </button>
+            </div>
           </div>
           <div class="sunbeam"></div>
           <div class="castle"></div>
@@ -412,7 +390,7 @@ onUnmounted(() => {
               <img
                 class="scene-pet-avatar"
                 :class="pet.element"
-                :src="petImages[pet.id]"
+                :src="getPetImage(pet)"
                 :alt="`${pet.name} capybara`"
                 draggable="false"
               />
@@ -434,6 +412,15 @@ onUnmounted(() => {
               <strong>{{ text.goal }}:</strong>
               <span>{{ missionGoal }}</span>
             </div>
+            <button
+              v-if="isExpeditionComplete"
+              class="claim-reward-button"
+              type="button"
+              :disabled="operationLoading.claimReward"
+              @click="completeExpedition"
+            >
+              {{ operationLoading.claimReward ? (isZh ? '回報中' : 'Claiming') : (isZh ? '回報' : 'Claim') }}
+            </button>
           </div>
         </div>
       </section>
@@ -448,15 +435,19 @@ onUnmounted(() => {
           </div>
           <h3>{{ text.expeditionLog }}</h3>
           <div ref="logLinesElement" class="log-lines">
-            <p v-for="log in visibleLogEntries" :key="`${log.at}-${log.message}`" :class="{ 'is-notice': log.variant === 'notice' }">
-              <span v-if="log.variant !== 'notice'" class="log-time">{{ formatLogTime(log.at) }}</span>
-              <span class="log-message">{{ log.message }}</span>
+            <p
+              v-for="log in visibleLogEntries"
+              :key="`${log.at}-${log.message}`"
+              :class="{ 'is-notice': log.variant === 'notice' }"
+            >
+              {{ displayLogEntry(log) }}
             </p>
-            <span v-if="visibleLogEntries.length === 0"></span>
-            <span v-if="visibleLogEntries.length === 0"></span>
-            <span v-if="visibleLogEntries.length === 0"></span>
-            <span v-if="visibleLogEntries.length === 0"></span>
-            <span class="log-bottom-spacer" aria-hidden="true"></span>
+            <p v-if="visibleLogEntries.length === 0" class="is-notice">
+              {{ isZh ? '尚無遠征紀錄' : 'No expedition logs yet' }}
+            </p>
+            <p v-if="operationError.claimReward" class="is-notice">
+              {{ operationError.claimReward }}
+            </p>
           </div>
         </div>
       </aside>
@@ -479,7 +470,7 @@ onUnmounted(() => {
 
           <div class="pet-body">
             <div class="portrait">
-              <img :src="petImages[pet.id]" :alt="`${pet.name} portrait`" draggable="false" />
+              <img :src="getPetImage(pet)" :alt="`${pet.name} portrait`" draggable="false" />
             </div>
 
             <div class="meter-block">
@@ -1032,6 +1023,8 @@ onUnmounted(() => {
 
 .log-sheet {
   position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
   padding: 42px 28px 22px;
@@ -1094,6 +1087,57 @@ onUnmounted(() => {
   transform: translateY(-2px);
 }
 
+.forest-choice:disabled {
+  cursor: wait;
+  filter: grayscale(0.35);
+}
+
+.expedition-api-state {
+  display: grid;
+  gap: 8px;
+  width: min(300px, 30%);
+  min-height: clamp(190px, 36vh, 260px);
+  align-content: center;
+  padding: 16px;
+  color: #fff7df;
+  text-align: center;
+  background: rgba(105, 50, 38, 0.9);
+  border: 3px solid rgba(255, 230, 160, 0.84);
+  border-radius: 8px;
+}
+
+.expedition-api-state strong {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.expedition-api-state button,
+.claim-reward-button {
+  min-height: 34px;
+  color: #26582b;
+  font-weight: 1000;
+  cursor: pointer;
+  background: linear-gradient(#c8e89e, #7fc165);
+  border: 3px solid #fff7df;
+  border-radius: 7px;
+}
+
+.claim-reward-button {
+  position: absolute;
+  right: 22px;
+  bottom: 76px;
+  z-index: 12;
+  min-width: 96px;
+  color: #fff7df;
+  background: #4b8e82;
+}
+
+.claim-reward-button:disabled,
+.expedition-api-state button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
 .forest-choice strong {
   min-width: 0;
   font-size: clamp(17px, 2.2vw, 25px);
@@ -1136,66 +1180,59 @@ onUnmounted(() => {
 }
 
 .log-lines {
-  display: grid;
-  align-content: start;
-  height: 85%;
-  overflow: auto;
-  padding: 0;
+  display: block;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0 10px 18px 0;
   background:
-    repeating-linear-gradient(180deg, transparent 0 35px, rgba(125, 188, 173, 0.5) 36px 37px, transparent 38px),
+    repeating-linear-gradient(180deg, transparent 0 33px, rgba(125, 188, 173, 0.34) 34px 35px, transparent 36px),
     linear-gradient(90deg, transparent 0 18px, #e9aaa1 18px 20px, transparent 20px);
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+  scrollbar-color: #7dbcad rgba(255, 247, 223, 0.45);
+  scrollbar-width: thin;
 }
 
 .log-lines::-webkit-scrollbar {
-  display: none;
+  width: 10px;
 }
 
-.log-lines > span {
-  display: block;
-  height: 38px;
-  border-bottom: 2px solid #c9e4d9;
+.log-lines::-webkit-scrollbar-track {
+  background: rgba(255, 247, 223, 0.45);
+  border-radius: 999px;
 }
 
-.log-lines > .log-bottom-spacer {
-  height: 50px;
-  border-bottom: 0;
+.log-lines::-webkit-scrollbar-thumb {
+  background: #7dbcad;
+  border: 2px solid #fff7df;
+  border-radius: 999px;
 }
 
 .log-lines p {
-  display: grid;
-  gap: 2px;
-  min-height: 38px;
-  margin: 0;
-  padding: 6px 10px 6px 28px;
+  display: block;
+  position: static;
+  box-sizing: border-box;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  margin: 0 0 8px;
+  padding: 8px 10px 8px 30px;
   color: #4c3324;
   font-size: 13px;
   font-weight: 400;
-  line-height: 1.25;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: normal;
   background: transparent;
   border-bottom: 1px solid rgba(125, 188, 173, 0.45);
 }
 
-.log-time {
-  color: #8a5d3c;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1;
-}
-
-.log-message {
-  font-weight: 400;
-}
-
 .log-lines p.is-notice {
-  align-content: center;
   min-height: 34px;
-  padding-top: 5px;
-  padding-bottom: 5px;
+  padding: 8px 10px;
   color: #2f6f66;
   font-size: 13px;
   font-weight: 500;
+  line-height: 1.45;
   text-align: center;
   background: rgba(114, 197, 180, 0.14);
   border-block: 1px solid rgba(75, 142, 130, 0.32);
@@ -1347,7 +1384,7 @@ onUnmounted(() => {
 
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px 10px;
   padding: 0 8px 8px;
   margin: 0;
@@ -1366,6 +1403,15 @@ onUnmounted(() => {
   margin: 0;
   font-size: 13px;
   font-weight: 900;
+}
+
+.stat-grid div:nth-child(4) {
+  grid-column: 1 / -1;
+}
+
+.stat-grid div:nth-child(4) dd {
+  overflow-wrap: anywhere;
+  text-align: right;
 }
 
 .pet-card.is-ember {
@@ -1489,6 +1535,21 @@ onUnmounted(() => {
     min-width: 58px;
     padding: 4px 7px;
     font-size: 11px;
+  }
+
+  .expedition-api-state {
+    width: min(360px, 94%);
+    min-height: 58px;
+    padding: 8px 10px;
+  }
+
+  .claim-reward-button {
+    right: 8px;
+    bottom: 58px;
+    min-width: 76px;
+    min-height: 28px;
+    font-size: 12px;
+    border-width: 2px;
   }
 
   .mission-footer {

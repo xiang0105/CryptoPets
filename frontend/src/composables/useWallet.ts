@@ -3,25 +3,31 @@ import type { PlayerProfile } from '@cryptopets/shared'
 import { loginWithSignature, requestLoginNonce } from '@/api/auth'
 import { clearAuthToken, getAuthToken } from '@/api/client'
 import { getPlayer } from '@/api/game'
-import { replaceGoodies } from '@/data/goodies'
-import { replacePets } from '@/data/pets'
-import { chainDataProvider } from '@/web3/chainData'
 
-const FRONTEND_ONLY_AUTH = import.meta.env.VITE_FRONTEND_ONLY_AUTH !== 'false'
+type WalletResetReason = 'none' | 'accountChanged' | 'chainChanged' | 'walletDisconnected'
+
+interface EthereumProvider {
+  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>
+  on?: (event: string, handler: (...args: unknown[]) => void) => void
+  removeListener?: (event: string, handler: (...args: unknown[]) => void) => void
+}
 
 declare global {
   interface Window {
-    ethereum?: {
-      request: (args: { method: string; params?: unknown[] }) => Promise<unknown>
-    }
+    ethereum?: EthereumProvider
   }
 }
 
+const expectedChainId = normalizeChainId(import.meta.env.VITE_CHAIN_ID)
 const walletAddress = ref('')
 const walletError = ref('')
+const walletNotice = ref('')
+const chainId = ref('')
 const player = ref<PlayerProfile | null>(null)
 const isAuthenticating = ref(false)
-const isSyncingChainAssets = ref(false)
+const walletSessionVersion = ref(0)
+const walletResetReason = ref<WalletResetReason>('none')
+let areWalletEventsRegistered = false
 
 const shortWalletAddress = computed(() => {
   if (!walletAddress.value) {
@@ -31,17 +37,86 @@ const shortWalletAddress = computed(() => {
   return `${walletAddress.value.slice(0, 6)}...${walletAddress.value.slice(-4)}`
 })
 
+const isWalletInstalled = computed(() => Boolean(window.ethereum))
+const isSessionAuthenticated = computed(() => Boolean(player.value && getAuthToken()))
+const isSupportedChain = computed(() => !expectedChainId || !chainId.value || chainId.value === expectedChainId)
+const expectedChainLabel = computed(() => expectedChainId ? Number.parseInt(expectedChainId, 16).toString() : '')
+
+function normalizeChainId(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return `0x${value.toString(16)}`
+  }
+
+  if (typeof value !== 'string' || !value.trim()) {
+    return ''
+  }
+
+  const trimmed = value.trim()
+  if (trimmed.startsWith('0x')) {
+    return `0x${Number.parseInt(trimmed, 16).toString(16)}`
+  }
+
+  const decimalValue = Number.parseInt(trimmed, 10)
+  return Number.isFinite(decimalValue) ? `0x${decimalValue.toString(16)}` : ''
+}
+
+function getWalletErrorMessage(error: unknown, fallback: string) {
+  if (
+    error &&
+    typeof error === 'object' &&
+    'code' in error &&
+    ((error as { code: unknown }).code === 4001 || (error as { code: unknown }).code === 'ACTION_REJECTED')
+  ) {
+    return 'Request rejected in MetaMask. Please approve the wallet prompt to continue.'
+  }
+
+  return error instanceof Error ? error.message : fallback
+}
+
+function clearWalletSession(reason: WalletResetReason, message: string, nextWalletAddress = '') {
+  clearAuthToken()
+  player.value = null
+  walletAddress.value = nextWalletAddress
+  walletError.value = message
+  walletNotice.value = message
+  walletResetReason.value = reason
+  walletSessionVersion.value += 1
+}
+
+async function syncChainId() {
+  if (!window.ethereum) {
+    chainId.value = ''
+    return
+  }
+
+  const currentChainId = await window.ethereum.request({ method: 'eth_chainId' })
+  chainId.value = normalizeChainId(currentChainId)
+}
+
+function assertSupportedChain() {
+  if (isSupportedChain.value) {
+    return
+  }
+
+  const expected = expectedChainLabel.value || expectedChainId
+  throw new Error(`Unsupported network. Please switch MetaMask to chain ${expected}.`)
+}
+
 async function connectWallet() {
   walletError.value = ''
+  walletNotice.value = ''
 
   if (!window.ethereum) {
-    walletError.value = 'MetaMask is not installed'
+    walletError.value = 'MetaMask is not installed. Please install or enable MetaMask to continue.'
     throw new Error(walletError.value)
   }
 
   isAuthenticating.value = true
 
   try {
+    await syncChainId()
+    assertSupportedChain()
+
     const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' })
 
     if (!Array.isArray(accounts) || typeof accounts[0] !== 'string') {
@@ -50,11 +125,6 @@ async function connectWallet() {
 
     const wallet = accounts[0]
     walletAddress.value = wallet
-
-    if (FRONTEND_ONLY_AUTH) {
-      await syncChainAssets(wallet)
-      return
-    }
 
     const challenge = await requestLoginNonce(wallet)
     const signature = await window.ethereum.request({
@@ -75,13 +145,10 @@ async function connectWallet() {
 
     walletAddress.value = session.player.wallet
     player.value = session.player
-    await syncChainAssets(session.player.wallet)
+    walletNotice.value = ''
+    walletResetReason.value = 'none'
   } catch (error) {
-    if (walletAddress.value) {
-      await syncChainAssets(walletAddress.value)
-    }
-    clearAuthToken()
-    walletError.value = error instanceof Error ? error.message : 'Wallet login failed'
+    clearWalletSession('none', getWalletErrorMessage(error, 'Wallet login failed'))
     throw error
   } finally {
     isAuthenticating.value = false
@@ -89,10 +156,6 @@ async function connectWallet() {
 }
 
 async function restoreSession() {
-  if (FRONTEND_ONLY_AUTH) {
-    return
-  }
-
   if (!getAuthToken()) {
     return
   }
@@ -100,43 +163,77 @@ async function restoreSession() {
   try {
     player.value = await getPlayer()
     walletAddress.value = player.value.wallet
-    await syncChainAssets(player.value.wallet)
   } catch {
-    clearAuthToken()
+    clearWalletSession('none', '', '')
   }
 }
 
-async function syncChainAssets(wallet: string) {
-  isSyncingChainAssets.value = true
-  walletError.value = ''
+function handleAccountsChanged(accounts: unknown) {
+  const nextWallet = Array.isArray(accounts) && typeof accounts[0] === 'string' ? accounts[0] : ''
 
-  try {
-    const [walletPets, walletGoodies] = await Promise.all([
-      chainDataProvider.getWalletPets(wallet),
-      chainDataProvider.getWalletGoodies(wallet),
-    ])
+  clearWalletSession(
+    nextWallet ? 'accountChanged' : 'walletDisconnected',
+    nextWallet
+      ? 'MetaMask account changed. Please sign in again with the selected account.'
+      : 'MetaMask wallet disconnected. Please connect a wallet to continue.',
+    '',
+  )
+}
 
-    replacePets(walletPets)
-    replaceGoodies(walletGoodies)
-  } catch (error) {
-    replacePets([])
-    replaceGoodies([])
-    walletError.value = error instanceof Error ? error.message : 'Chain asset sync failed'
-  } finally {
-    isSyncingChainAssets.value = false
+function handleChainChanged(nextChainId: unknown) {
+  chainId.value = normalizeChainId(nextChainId)
+
+  if (isSupportedChain.value) {
+    clearWalletSession('chainChanged', 'Network changed. Please sign in again.', '')
+    return
   }
+
+  clearWalletSession(
+    'chainChanged',
+    `Unsupported network. Please switch MetaMask to chain ${expectedChainLabel.value || expectedChainId}.`,
+    '',
+  )
+}
+
+function registerWalletEvents() {
+  if (!window.ethereum || areWalletEventsRegistered) {
+    return
+  }
+
+  window.ethereum.on?.('accountsChanged', handleAccountsChanged)
+  window.ethereum.on?.('chainChanged', handleChainChanged)
+  areWalletEventsRegistered = true
+}
+
+function unregisterWalletEvents() {
+  if (!window.ethereum || !areWalletEventsRegistered) {
+    return
+  }
+
+  window.ethereum.removeListener?.('accountsChanged', handleAccountsChanged)
+  window.ethereum.removeListener?.('chainChanged', handleChainChanged)
+  areWalletEventsRegistered = false
 }
 
 export function useWallet() {
   return {
     walletAddress,
     walletError,
+    walletNotice,
+    chainId,
     player,
     isAuthenticating,
-    isSyncingChainAssets,
+    isWalletInstalled,
+    isSessionAuthenticated,
+    isSupportedChain,
+    expectedChainLabel,
+    walletSessionVersion,
+    walletResetReason,
     shortWalletAddress,
     connectWallet,
     restoreSession,
-    syncChainAssets,
+    syncChainId,
+    registerWalletEvents,
+    unregisterWalletEvents,
   }
 }

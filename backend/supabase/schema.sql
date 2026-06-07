@@ -61,7 +61,7 @@ create table if not exists public.market_listings (
   seller_id uuid not null references public.users(id) on delete cascade,
   material_id text not null,
   amount integer not null default 1 check (amount > 0),
-  price integer not null check (price > 0),
+  price numeric(30, 18) not null check (price > 0),
   status text not null default 'active' check (status in ('active', 'sold', 'cancelled')),
   buyer_id uuid references public.users(id) on delete set null,
   created_at timestamptz not null default now(),
@@ -87,7 +87,7 @@ create table if not exists public.expeditions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.users(id) on delete cascade,
   pet_ids uuid[] not null check (array_length(pet_ids, 1) between 1 and 4),
-  expedition_type text not null default 'forest' check (expedition_type in ('forest', 'market', 'training')),
+  expedition_type text not null default 'orange' check (expedition_type in ('orange', 'apple', 'snow-peach')),
   started_at timestamptz not null default now(),
   ends_at timestamptz not null,
   claimed_at timestamptz,
@@ -95,6 +95,27 @@ create table if not exists public.expeditions (
   reward jsonb,
   created_at timestamptz not null default now()
 );
+
+create table if not exists public.expedition_logs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users(id) on delete cascade,
+  expedition_id uuid references public.expeditions(id) on delete cascade,
+  occurred_at timestamptz not null,
+  message_zh text not null,
+  message_en text not null,
+  variant text check (variant is null or variant in ('notice')),
+  created_at timestamptz not null default now()
+);
+
+alter table public.expeditions
+  alter column expedition_type set default 'orange';
+
+alter table public.expeditions
+  drop constraint if exists expeditions_expedition_type_check;
+
+alter table public.expeditions
+  add constraint expeditions_expedition_type_check
+  check (expedition_type in ('orange', 'apple', 'snow-peach')) not valid;
 
 create table if not exists public.friends (
   user_id uuid not null references public.users(id) on delete cascade,
@@ -126,6 +147,8 @@ create index if not exists market_listings_seller_status_idx on public.market_li
 create index if not exists transactions_user_created_idx on public.transactions(user_id, created_at desc);
 create index if not exists expeditions_user_status_idx on public.expeditions(user_id, status);
 create index if not exists expeditions_ends_at_idx on public.expeditions(ends_at);
+create index if not exists expedition_logs_user_occurred_idx on public.expedition_logs(user_id, occurred_at desc);
+create index if not exists expedition_logs_expedition_idx on public.expedition_logs(expedition_id, occurred_at);
 create index if not exists friends_friend_id_idx on public.friends(friend_id);
 create index if not exists friend_requests_recipient_status_idx on public.friend_requests(recipient_id, status);
 
@@ -183,6 +206,7 @@ alter table public.inventory enable row level security;
 alter table public.market_listings enable row level security;
 alter table public.transactions enable row level security;
 alter table public.expeditions enable row level security;
+alter table public.expedition_logs enable row level security;
 alter table public.friends enable row level security;
 alter table public.friend_requests enable row level security;
 
@@ -253,6 +277,15 @@ create policy expeditions_select_own on public.expeditions
     )
   );
 
+create policy expedition_logs_select_own on public.expedition_logs
+  for select using (
+    exists (
+      select 1 from public.users
+      where users.id = expedition_logs.user_id
+      and users.wallet = lower(coalesce(auth.jwt() ->> 'wallet', ''))
+    )
+  );
+
 create policy friends_select_own on public.friends
   for select using (
     exists (
@@ -271,5 +304,5 @@ create policy friend_requests_select_own on public.friend_requests
     )
   );
 
--- No anon insert/update/delete policies are defined. The backend uses the service role key,
--- which must remain server-only, to perform validated game-state mutations.
+-- 不定義 anon insert/update/delete policy。後端使用 service role key
+-- 執行已驗證的遊戲狀態 mutation，該 key 必須只存在於伺服器端。

@@ -4,7 +4,7 @@ import { createLoginNonce, loginWithSignature } from '../services/authService.js
 
 const nonceSchema = z.object({
   wallet: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
-})
+}).strict()
 
 export async function createNonceController(request: Request, response: Response) {
   const { wallet } = nonceSchema.parse(request.body)
