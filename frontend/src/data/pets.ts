@@ -10,6 +10,8 @@ export interface Pet {
   stage: number
   level: number
   tokenURI: string
+  basePetId: string
+  skinId: number
   stats: {
     iv: number
     hp: number

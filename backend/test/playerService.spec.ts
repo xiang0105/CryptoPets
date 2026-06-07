@@ -12,6 +12,9 @@ type PetRow = {
   token_id: string
   contract_address: `0x${string}`
   chain_id: number
+  base_pet_id: string
+  iv: number
+  skin_id: number
   name: string
   element: 'citrus' | 'ember' | 'frost' | 'bloom'
   stage: number
@@ -74,6 +77,10 @@ const rows = vi.hoisted(() => ({
   expeditions: [] as ExpeditionRow[],
 }))
 
+const mockChainPets = vi.hoisted(() => ({
+  pets: [] as Array<{ tokenId: string; iv: number; skinId: number }>,
+}))
+
 vi.mock('../src/config/env.js', () => ({
   env: mockEnv,
 }))
@@ -102,12 +109,26 @@ vi.mock('../src/config/supabase.js', () => ({
   },
 }))
 
+vi.mock('../src/services/chainPetProvider.js', () => ({
+  isChainPetSyncEnabled() {
+    return Boolean(mockEnv.RPC_URL && mockEnv.NFT_CONTRACT_ADDRESS)
+  },
+  createChainPetProvider() {
+    return {
+      async getWalletPets() {
+        return mockChainPets.pets
+      },
+    }
+  },
+}))
+
 describe('player service', () => {
   beforeEach(() => {
     rows.users.length = 0
     rows.pets.length = 0
     rows.currencies.length = 0
     rows.expeditions.length = 0
+    mockChainPets.pets.length = 0
 
     mockEnv.RPC_URL = undefined
     mockEnv.NFT_CONTRACT_ADDRESS = undefined
@@ -221,6 +242,62 @@ describe('player service', () => {
       nftContractAddress: configuredNftAddress,
     })
   })
+
+  it('syncs on-chain token id, iv, and skin id into a derived default capybara when chain is enabled', async () => {
+    const { getPlayerProfile } = await import('../src/services/playerService.js')
+    mockEnv.RPC_URL = 'https://rpc.test'
+    mockEnv.NFT_CONTRACT_ADDRESS = configuredNftAddress
+    mockEnv.CHAIN_ID = 11155111
+    mockChainPets.pets.push({ tokenId: '7', iv: 20, skinId: 3 })
+    rows.users.push({ id: userId, wallet, username: 'Tester' })
+
+    const profile = await getPlayerProfile(userId)
+
+    expect(rows.pets).toEqual([
+      expect.objectContaining({
+        user_id: userId,
+        token_id: '7',
+        contract_address: configuredNftAddress,
+        chain_id: 11155111,
+        base_pet_id: 'TEST-PET-001',
+        iv: 20,
+        skin_id: 3,
+        stats: {
+          iv: 20,
+          hp: 120,
+          maxHp: 120,
+          atk: 90,
+          def: 72,
+        },
+      }),
+    ])
+    expect(profile.pets).toEqual([
+      expect.objectContaining({
+        tokenId: '7',
+        basePetId: 'TEST-PET-001',
+        skinId: 3,
+        stats: {
+          iv: 20,
+          hp: 120,
+          maxHp: 120,
+          atk: 90,
+          def: 72,
+        },
+      }),
+    ])
+  })
+
+  it('does not create local starter pets when chain is enabled and wallet has no on-chain pets', async () => {
+    const { initializePlayerIfNeeded } = await import('../src/services/playerService.js')
+    mockEnv.RPC_URL = 'https://rpc.test'
+    mockEnv.NFT_CONTRACT_ADDRESS = configuredNftAddress
+    mockEnv.CHAIN_ID = 11155111
+
+    await initializePlayerIfNeeded(userId, wallet)
+
+    expect(rows.pets).toHaveLength(0)
+    expect(rows.currencies).toEqual([expect.objectContaining({ user_id: userId, coins: 0 })])
+  })
 })
 
 function createUserBuilder() {
@@ -268,6 +345,32 @@ function createPetBuilder() {
           created_at: pet.created_at ?? now,
         })),
       )
+      return { error: null }
+    },
+    async upsert(pets: PetRow[]) {
+      const now = new Date().toISOString()
+      for (const pet of pets) {
+        const existing = rows.pets.find(
+          (row) =>
+            row.chain_id === pet.chain_id &&
+            row.contract_address === pet.contract_address &&
+            row.token_id === pet.token_id,
+        )
+
+        if (existing) {
+          Object.assign(existing, pet)
+        } else {
+          rows.pets.push({
+            ...pet,
+            id: pet.id ?? `10000000-0000-4000-8000-${String(rows.pets.length + 1).padStart(12, '0')}`,
+            exp_current: pet.exp_current ?? 0,
+            exp_next: pet.exp_next ?? 1000,
+            birth_time: pet.birth_time ?? now,
+            created_at: pet.created_at ?? now,
+          })
+        }
+      }
+
       return { error: null }
     },
     then(resolve: (value: { count?: number; data?: PetRow[]; error: null }) => void) {
@@ -327,6 +430,9 @@ function seedPet(overrides: Partial<PetRow> = {}) {
     token_id: `${userId}:TEST-PET-001`,
     contract_address: zeroAddress,
     chain_id: 1,
+    base_pet_id: 'TEST-PET-001',
+    iv: 80,
+    skin_id: 0,
     name: 'Capy',
     element: 'citrus',
     stage: 1,

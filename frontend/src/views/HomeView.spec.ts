@@ -70,6 +70,8 @@ const testPets: Pet[] = [
     stage: 1,
     level: 1,
     tokenURI: '',
+    basePetId: 'TEST-PET-001',
+    skinId: 0,
     stats: { iv: 80, hp: 100, maxHp: 100, atk: 75, def: 60 },
     exp: { current: 0, next: 100 },
     owner: '0x0000000000000000000000000000000000000000',

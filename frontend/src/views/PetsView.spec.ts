@@ -55,6 +55,8 @@ const testPets: Pet[] = [
     stage: 1,
     level: 1,
     tokenURI: '',
+    basePetId: 'TEST-PET-001',
+    skinId: 0,
     stats: { iv: 80, hp: 100, maxHp: 100, atk: 75, def: 60 },
     profile: { zh: 'Capy-san profile', en: 'Capy-san profile' },
     leaderSkill: {
@@ -80,6 +82,8 @@ const testPets: Pet[] = [
     stage: 2,
     level: 4,
     tokenURI: '',
+    basePetId: 'TEST-PET-001',
+    skinId: 0,
     stats: { iv: 72, hp: 110, maxHp: 120, atk: 55, def: 86 },
     exp: { current: 40, next: 100 },
     owner: '0x0000000000000000000000000000000000000000',

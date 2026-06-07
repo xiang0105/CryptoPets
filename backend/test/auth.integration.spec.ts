@@ -204,7 +204,7 @@ describe('auth integration', () => {
     expect(loginResponse.status).toBe(200)
     expect(loginBody.token).toEqual(expect.any(String))
     expect(loginBody.player.wallet).toBe(wallet.address.toLowerCase())
-    expect(initializePlayerIfNeeded).toHaveBeenCalledWith(userId)
+    expect(initializePlayerIfNeeded).toHaveBeenCalledWith(userId, wallet.address.toLowerCase())
     expect(getPlayerProfile).toHaveBeenCalledWith(userId)
     expect(nonceRows[0]?.used_at).toEqual(expect.any(String))
 
