@@ -50,6 +50,7 @@ vi.mock('@/composables/useGameApi', () => ({
 const testPets: Pet[] = [
   {
     id: 'pet-1',
+    tokenId: '7',
     name: 'Capy-san',
     element: 'ember',
     stage: 1,
@@ -77,6 +78,7 @@ const testPets: Pet[] = [
   },
   {
     id: 'pet-2',
+    tokenId: '8',
     name: 'Bobo',
     element: 'frost',
     stage: 2,

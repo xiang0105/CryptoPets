@@ -5,6 +5,7 @@ export type { PetElement }
 
 export interface Pet {
   id: string
+  tokenId: string
   name: string
   element: PetElement
   stage: number

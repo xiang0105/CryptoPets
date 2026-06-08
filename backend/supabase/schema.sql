@@ -25,6 +25,7 @@ create table if not exists public.pets (
   chain_id integer not null,
   base_pet_id text not null default 'TEST-PET-001',
   iv integer not null default 0 check (iv >= 0),
+  level integer not null default 1 check (level >= 0),
   skin_id integer not null default 0 check (skin_id >= 0),
   name text not null,
   element text not null check (element in ('citrus', 'ember', 'frost', 'bloom')),

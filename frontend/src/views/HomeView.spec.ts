@@ -65,6 +65,7 @@ vi.mock('@/composables/useGameApi', () => ({
 const testPets: Pet[] = [
   {
     id: 'pet-1',
+    tokenId: '7',
     name: 'Capy-san',
     element: 'ember',
     stage: 1,

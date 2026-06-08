@@ -14,6 +14,7 @@ type PetRow = {
   chain_id: number
   base_pet_id: string
   iv: number
+  level: number
   skin_id: number
   name: string
   element: 'citrus' | 'ember' | 'frost' | 'bloom'
@@ -65,6 +66,7 @@ const mockEnv = vi.hoisted(() => ({
   WEB3_LOGIN_STATEMENT: 'Sign in to CryptoPets',
   RPC_URL: undefined as string | undefined,
   NFT_CONTRACT_ADDRESS: undefined as string | undefined,
+  NFT_OWNER_PRIVATE_KEY: undefined as string | undefined,
   MATERIAL_BACKPACK_SOURCE: 'local-db',
   MATERIAL_CONTRACT_ADDRESS: undefined as string | undefined,
   CHAIN_ID: 1,
@@ -78,7 +80,8 @@ const rows = vi.hoisted(() => ({
 }))
 
 const mockChainPets = vi.hoisted(() => ({
-  pets: [] as Array<{ tokenId: string; iv: number; skinId: number }>,
+  pets: [] as Array<{ tokenId: string; name: string; iv: number; level: number; skinId: number }>,
+  mintedPets: [] as Array<{ wallet: string; petName: string; iv: number }>,
 }))
 
 vi.mock('../src/config/env.js', () => ({
@@ -118,6 +121,12 @@ vi.mock('../src/services/chainPetProvider.js', () => ({
       async getWalletPets() {
         return mockChainPets.pets
       },
+      async mintStarterPet(wallet: string, petName: string, iv: number) {
+        const tokenId = String(mockChainPets.pets.length + 1)
+        mockChainPets.mintedPets.push({ wallet, petName, iv })
+        mockChainPets.pets.push({ tokenId, name: petName, iv, level: 1, skinId: 0 })
+        return tokenId
+      },
     }
   },
 }))
@@ -129,32 +138,35 @@ describe('player service', () => {
     rows.currencies.length = 0
     rows.expeditions.length = 0
     mockChainPets.pets.length = 0
+    mockChainPets.mintedPets.length = 0
 
     mockEnv.RPC_URL = undefined
     mockEnv.NFT_CONTRACT_ADDRESS = undefined
+    mockEnv.NFT_OWNER_PRIVATE_KEY = undefined
     mockEnv.CHAIN_ID = 1
   })
 
-  it('creates starter pets and initial currency for a new player', async () => {
+  it('creates one unique local capybara and initial currency for a new player', async () => {
     const { initializePlayerIfNeeded } = await import('../src/services/playerService.js')
 
-    await initializePlayerIfNeeded(userId)
+    await initializePlayerIfNeeded(userId, wallet)
 
-    expect(rows.pets.length).toBeGreaterThan(0)
-    expect(rows.pets).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          user_id: userId,
-          contract_address: zeroAddress,
-          chain_id: 1,
-          exp_current: 0,
-          exp_next: 1000,
-        }),
-      ]),
+    expect(rows.pets).toHaveLength(1)
+    expect(rows.pets[0]).toEqual(
+      expect.objectContaining({
+        user_id: userId,
+        contract_address: zeroAddress,
+        chain_id: 1,
+        level: 1,
+        exp_current: 0,
+        exp_next: 1000,
+      }),
     )
-    expect(rows.pets.map((pet) => pet.token_id)).toEqual(
-      expect.arrayContaining(rows.pets.map((pet) => expect.stringContaining(`${userId}:`))),
-    )
+    expect(rows.pets[0]?.token_id).toMatch(new RegExp(`^${userId}:UNIQUE-PET-[A-F0-9]{6}$`))
+    expect(rows.pets[0]?.name).toMatch(/-[A-F0-9]{6}$/)
+    expect(rows.pets[0]?.base_pet_id).toMatch(/^TEST-PET-00[1-4]$/)
+    expect(rows.pets[0]?.iv).toBeGreaterThanOrEqual(60)
+    expect(rows.pets[0]?.iv).toBeLessThanOrEqual(100)
     expect(rows.currencies).toEqual([
       expect.objectContaining({
         user_id: userId,
@@ -231,6 +243,7 @@ describe('player service', () => {
     const { getPlayerProfile } = await import('../src/services/playerService.js')
     mockEnv.RPC_URL = 'https://rpc.test'
     mockEnv.NFT_CONTRACT_ADDRESS = configuredNftAddress
+    mockEnv.NFT_OWNER_PRIVATE_KEY = '0x1111111111111111111111111111111111111111111111111111111111111111'
     mockEnv.CHAIN_ID = 11155111
     rows.users.push({ id: userId, wallet, username: null })
 
@@ -243,12 +256,12 @@ describe('player service', () => {
     })
   })
 
-  it('syncs on-chain token id, iv, and skin id into a derived default capybara when chain is enabled', async () => {
+  it('syncs on-chain token id, iv, level, skin id, and pet name when chain is enabled', async () => {
     const { getPlayerProfile } = await import('../src/services/playerService.js')
     mockEnv.RPC_URL = 'https://rpc.test'
     mockEnv.NFT_CONTRACT_ADDRESS = configuredNftAddress
     mockEnv.CHAIN_ID = 11155111
-    mockChainPets.pets.push({ tokenId: '7', iv: 20, skinId: 3 })
+    mockChainPets.pets.push({ tokenId: '7', name: 'MAX', iv: 20, level: 4, skinId: 3 })
     rows.users.push({ id: userId, wallet, username: 'Tester' })
 
     const profile = await getPlayerProfile(userId)
@@ -259,43 +272,61 @@ describe('player service', () => {
         token_id: '7',
         contract_address: configuredNftAddress,
         chain_id: 11155111,
-        base_pet_id: 'TEST-PET-001',
+        base_pet_id: 'TEST-PET-002',
         iv: 20,
+        level: 4,
         skin_id: 3,
         stats: {
           iv: 20,
-          hp: 120,
-          maxHp: 120,
-          atk: 90,
-          def: 72,
+          hp: 114,
+          maxHp: 114,
+          atk: 102,
+          def: 48,
         },
       }),
     ])
     expect(profile.pets).toEqual([
       expect.objectContaining({
         tokenId: '7',
-        basePetId: 'TEST-PET-001',
+        basePetId: 'TEST-PET-002',
+        level: 4,
         skinId: 3,
         stats: {
           iv: 20,
-          hp: 120,
-          maxHp: 120,
-          atk: 90,
-          def: 72,
+          hp: 114,
+          maxHp: 114,
+          atk: 102,
+          def: 48,
         },
       }),
     ])
   })
 
-  it('does not create local starter pets when chain is enabled and wallet has no on-chain pets', async () => {
+  it('mints and syncs a starter pet when chain is enabled and wallet has no on-chain pets', async () => {
     const { initializePlayerIfNeeded } = await import('../src/services/playerService.js')
     mockEnv.RPC_URL = 'https://rpc.test'
     mockEnv.NFT_CONTRACT_ADDRESS = configuredNftAddress
+    mockEnv.NFT_OWNER_PRIVATE_KEY = '0x1111111111111111111111111111111111111111111111111111111111111111'
     mockEnv.CHAIN_ID = 11155111
 
     await initializePlayerIfNeeded(userId, wallet)
 
-    expect(rows.pets).toHaveLength(0)
+    expect(mockChainPets.mintedPets).toEqual([
+      expect.objectContaining({
+        wallet,
+        petName: expect.stringMatching(/^(sakiko|MAX|SONORATO|CANESAN)$/),
+        iv: expect.any(Number),
+      }),
+    ])
+    expect(rows.pets).toEqual([
+      expect.objectContaining({
+        user_id: userId,
+        token_id: '1',
+        contract_address: configuredNftAddress,
+        chain_id: 11155111,
+        level: 1,
+      }),
+    ])
     expect(rows.currencies).toEqual([expect.objectContaining({ user_id: userId, coins: 0 })])
   })
 })
@@ -373,6 +404,20 @@ function createPetBuilder() {
 
       return { error: null }
     },
+    delete() {
+      return this
+    },
+    in(column: string, values: unknown[]) {
+      if (column === 'id') {
+        for (let index = rows.pets.length - 1; index >= 0; index -= 1) {
+          if (values.includes(rows.pets[index]!.id)) {
+            rows.pets.splice(index, 1)
+          }
+        }
+      }
+
+      return { error: null }
+    },
     then(resolve: (value: { count?: number; data?: PetRow[]; error: null }) => void) {
       const pets = rows.pets.filter((row) => matches(row, state.filters))
       if (state.countOnly) {
@@ -432,6 +477,7 @@ function seedPet(overrides: Partial<PetRow> = {}) {
     chain_id: 1,
     base_pet_id: 'TEST-PET-001',
     iv: 80,
+    level: 1,
     skin_id: 0,
     name: 'Capy',
     element: 'citrus',

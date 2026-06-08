@@ -7,8 +7,7 @@ import { useGameApi } from '@/composables/useGameApi'
 import { useWallet } from '@/composables/useWallet'
 import { pets } from '@/data/pets'
 import { setExpeditionTeam } from '@/state/expeditionTeam'
-import { capybaraImageBySlug } from '@/content/gameAssets'
-import { starterCapybaras } from '@cryptopets/game-content'
+import { getPetImage } from '@/content/gameAssets'
 import logoUrl from '@game-content/assets/branding/logo.png'
 import backgroundMusicUrl from '@game-content/assets/audio/capybara-meadow.mp3'
 
@@ -26,10 +25,10 @@ const actionItems = computed(() => [
   { label: currentMessages.value.app.actions.monoMode, icon: 'circle-half-stroke' },
 ])
 
-const starterGiftPets = starterCapybaras.map((pet) => ({
+const starterGiftPets = computed(() => pets.map((pet) => ({
   name: pet.name,
-  image: capybaraImageBySlug[pet.slug],
-}))
+  image: getPetImage(pet),
+})))
 
 const isMonoMode = ref(false)
 const isHelpPanelOpen = ref(false)

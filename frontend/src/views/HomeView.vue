@@ -506,7 +506,11 @@ onUnmounted(() => {
             </div>
             <div>
               <dt>ID</dt>
-              <dd>{{ pet.id }}</dd>
+              <dd>{{ pet.tokenId }}</dd>
+            </div>
+            <div>
+              <dt>Skin</dt>
+              <dd>{{ pet.skinId }}</dd>
             </div>
           </dl>
         </article>

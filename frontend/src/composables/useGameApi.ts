@@ -187,10 +187,11 @@ function mapPlayerPet(pet: PlayerProfile['pets'][number]): Pet {
 
   return {
     id: pet.id,
+    tokenId: pet.tokenId,
     name: pet.name,
     element: pet.element,
     stage: pet.stage,
-    level: Math.max(0, Math.floor(pet.exp.current / Math.max(1, pet.exp.next))),
+    level: pet.level,
     tokenURI: pet.tokenUri,
     basePetId: pet.basePetId,
     skinId: pet.skinId,

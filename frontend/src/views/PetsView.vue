@@ -335,7 +335,15 @@ onMounted(() => {
             <dl>
               <div>
                 <dt>{{ text.token }}</dt>
-                <dd>{{ selectedPet.id }}</dd>
+                <dd>{{ selectedPet.tokenId }}</dd>
+              </div>
+              <div>
+                <dt>IV</dt>
+                <dd>{{ selectedPet.stats.iv }}</dd>
+              </div>
+              <div>
+                <dt>petSkin</dt>
+                <dd>{{ selectedPet.skinId }}</dd>
               </div>
               <div>
                 <dt>{{ text.element }}</dt>

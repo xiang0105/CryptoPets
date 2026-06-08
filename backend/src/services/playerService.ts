@@ -1,6 +1,7 @@
+import crypto from 'node:crypto'
 import type { PlayerProfile } from '@cryptopets/shared'
 import type { PetStatsDefinition, StarterCapybaraDefinition } from '@cryptopets/game-content'
-import { starterCapybaraById, starterCapybaras } from '@cryptopets/game-content'
+import { starterCapybaraById, starterCapybaraByName, starterCapybaras } from '@cryptopets/game-content'
 import { env } from '../config/env.js'
 import { supabase } from '../config/supabase.js'
 import { HttpError } from '../utils/httpError.js'
@@ -31,13 +32,15 @@ export async function initializePlayerIfNeeded(userId: string, wallet?: PlayerPr
 
   const now = new Date().toISOString()
   const contractAddress = (env.NFT_CONTRACT_ADDRESS ?? '0x0000000000000000000000000000000000000000').toLowerCase()
-  const pets = starterCapybaras.map((pet) => ({
+  const pet = createUniquePlayerCapybara(userId, wallet)
+  const pets = [{
     user_id: userId,
     token_id: `${userId}:${pet.id}`,
     contract_address: contractAddress,
     chain_id: env.CHAIN_ID,
-    base_pet_id: pet.id,
+    base_pet_id: pet.basePetId,
     iv: pet.stats.iv,
+    level: 1,
     skin_id: 0,
     name: pet.name,
     element: pet.element,
@@ -47,7 +50,7 @@ export async function initializePlayerIfNeeded(userId: string, wallet?: PlayerPr
     exp_current: 0,
     exp_next: 1000,
     birth_time: now,
-  }))
+  }]
 
   const { error: insertError } = await supabase.from('pets').insert(pets)
 
@@ -75,7 +78,7 @@ export async function getPlayerProfile(userId: string): Promise<PlayerProfile> {
 
   const { data: pets, error: petsError } = await supabase
     .from('pets')
-    .select('id,token_id,contract_address,chain_id,base_pet_id,iv,skin_id,name,element,stage,token_uri,stats,exp_current,exp_next,birth_time')
+    .select('id,token_id,contract_address,chain_id,base_pet_id,iv,level,skin_id,name,element,stage,token_uri,stats,exp_current,exp_next,birth_time')
     .eq('user_id', userId)
     .order('created_at', { ascending: true })
 
@@ -113,6 +116,7 @@ export async function getPlayerProfile(userId: string): Promise<PlayerProfile> {
       contractAddress: pet.contract_address,
       chainId: pet.chain_id,
       basePetId: pet.base_pet_id,
+      level: pet.level,
       skinId: pet.skin_id,
       name: pet.name,
       element: pet.element,
@@ -150,28 +154,44 @@ export function deriveStatsFromIv(baseStats: PetStatsDefinition, iv: number): Pe
 }
 
 async function syncOnChainPets(userId: string, wallet: PlayerProfile['wallet']) {
-  const chainPets = await createChainPetProvider().getWalletPets(wallet)
+  const chainPetProvider = createChainPetProvider()
+  let chainPets = await chainPetProvider.getWalletPets(wallet)
   const contractAddress = (env.NFT_CONTRACT_ADDRESS as string).toLowerCase()
 
   if (chainPets.length === 0) {
-    return
+    if (!env.NFT_OWNER_PRIVATE_KEY) {
+      throw new HttpError(500, 'CHAIN_PET_MINTER_NOT_CONFIGURED')
+    }
+
+    const starterPet = createUniquePlayerCapybara(userId, wallet)
+    const basePet = starterCapybaraById[starterPet.basePetId] ?? getDefaultBasePet()
+    await chainPetProvider.mintStarterPet(wallet, basePet.name, starterPet.stats.iv)
+    chainPets = await chainPetProvider.getWalletPets(wallet)
+
+    if (chainPets.length === 0) {
+      throw new HttpError(500, 'CHAIN_PET_MINT_FAILED')
+    }
   }
 
-  const basePet = getDefaultBasePet()
-  const rows = chainPets.map((pet) => ({
-    user_id: userId,
-    token_id: pet.tokenId,
-    contract_address: contractAddress,
-    chain_id: env.CHAIN_ID,
-    base_pet_id: basePet.id,
-    iv: pet.iv,
-    skin_id: pet.skinId,
-    name: basePet.name,
-    element: basePet.element,
-    stage: basePet.stage,
-    token_uri: basePet.tokenURI,
-    stats: deriveStatsFromIv(basePet.stats, pet.iv),
-  }))
+  const rows = chainPets.map((pet) => {
+    const basePet = starterCapybaraByName[pet.name] ?? getDefaultBasePet()
+
+    return {
+      user_id: userId,
+      token_id: pet.tokenId,
+      contract_address: contractAddress,
+      chain_id: env.CHAIN_ID,
+      base_pet_id: basePet.id,
+      iv: pet.iv,
+      level: pet.level,
+      skin_id: pet.skinId,
+      name: basePet.name,
+      element: basePet.element,
+      stage: basePet.stage,
+      token_uri: basePet.tokenURI,
+      stats: deriveStatsFromIv(basePet.stats, pet.iv),
+    }
+  })
 
   const { error } = await supabase.from('pets').upsert(rows, {
     onConflict: 'chain_id,contract_address,token_id',
@@ -179,6 +199,30 @@ async function syncOnChainPets(userId: string, wallet: PlayerProfile['wallet']) 
 
   if (error) {
     throw new HttpError(500, 'CHAIN_PETS_SYNC_FAILED')
+  }
+
+  const chainTokenIds = chainPets.map((pet) => pet.tokenId)
+  const { data: existingPets, error: lookupError } = await supabase
+    .from('pets')
+    .select('id,token_id')
+    .eq('user_id', userId)
+    .eq('contract_address', contractAddress)
+    .eq('chain_id', env.CHAIN_ID)
+
+  if (lookupError) {
+    throw new HttpError(500, 'PETS_LOOKUP_FAILED')
+  }
+
+  const stalePetIds = (existingPets ?? [])
+    .filter((pet) => !chainTokenIds.includes(pet.token_id))
+    .map((pet) => pet.id)
+
+  if (stalePetIds.length > 0) {
+    const { error: deleteError } = await supabase.from('pets').delete().in('id', stalePetIds)
+
+    if (deleteError) {
+      throw new HttpError(500, 'CHAIN_PETS_SYNC_FAILED')
+    }
   }
 }
 
@@ -208,6 +252,28 @@ function getDefaultBasePet(): StarterCapybaraDefinition {
   }
 
   return pet
+}
+
+function createUniquePlayerCapybara(
+  userId: string,
+  wallet?: PlayerProfile['wallet'],
+): StarterCapybaraDefinition & { basePetId: string } {
+  const seed = crypto
+    .createHash('sha256')
+    .update(`${userId}:${wallet ?? ''}`)
+    .digest()
+  const basePet = starterCapybaras[seed[0] % starterCapybaras.length] ?? getDefaultBasePet()
+  const iv = 60 + (seed[1] % 41)
+  const suffix = seed.toString('hex').slice(0, 6).toUpperCase()
+
+  return {
+    ...basePet,
+    basePetId: basePet.id,
+    id: `UNIQUE-PET-${suffix}`,
+    name: `${basePet.name}-${suffix}`,
+    tokenURI: `local-unique://pets/${userId}/${suffix.toLowerCase()}`,
+    stats: deriveStatsFromIv(basePet.stats, iv),
+  }
 }
 
 function scaleStat(baseStat: number, iv: number) {

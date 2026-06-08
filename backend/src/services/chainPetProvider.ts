@@ -4,17 +4,21 @@ import { env } from '../config/env.js'
 
 export interface ChainPet {
   tokenId: string
+  name: string
   iv: number
+  level: number
   skinId: number
 }
 
 export interface ChainPetProvider {
   getWalletPets(wallet: WalletAddress): Promise<ChainPet[]>
+  mintStarterPet(wallet: WalletAddress, petName: string, iv: number): Promise<string>
 }
 
 const petAbi = [
-  'function tokensOfOwner(address owner) view returns (uint256[])',
-  'function getPet(uint256 tokenId) view returns (uint16 iv, uint16 skinId)',
+  'function getUserPetId(address who) view returns (uint256[])',
+  'function ownerToPets(address owner, uint256 petId) view returns (uint256 petId, string petName, uint8 petIv, uint256 petLevel, uint8 petSkin)',
+  'function addPet(string petName, address to, uint8 petIv) returns (bool)',
 ]
 
 export function isChainPetSyncEnabled() {
@@ -27,7 +31,8 @@ export function createChainPetProvider(): ChainPetProvider {
   }
 
   const provider = new ethers.JsonRpcProvider(env.RPC_URL)
-  const contract = new ethers.Contract(env.NFT_CONTRACT_ADDRESS, petAbi, provider)
+  const runner = env.NFT_OWNER_PRIVATE_KEY ? new ethers.Wallet(env.NFT_OWNER_PRIVATE_KEY, provider) : provider
+  const contract = new ethers.Contract(env.NFT_CONTRACT_ADDRESS, petAbi, runner)
 
   return new EthersChainPetProvider(contract)
 }
@@ -36,30 +41,56 @@ export const emptyChainPetProvider: ChainPetProvider = {
   async getWalletPets() {
     return []
   },
+  async mintStarterPet() {
+    throw new Error('CHAIN_PET_MINTER_NOT_CONFIGURED')
+  },
 }
 
 class EthersChainPetProvider implements ChainPetProvider {
   constructor(private readonly contract: ethers.Contract) {}
 
   async getWalletPets(wallet: WalletAddress): Promise<ChainPet[]> {
-    const tokenIds = (await this.contract.tokensOfOwner(wallet)) as bigint[]
+    const tokenIds = (await this.contract.getUserPetId(wallet)) as bigint[]
 
     return Promise.all(
       tokenIds.map(async (tokenId) => {
-        const pet = (await this.contract.getPet(tokenId)) as {
-          0: bigint | number
-          1: bigint | number
-          iv?: bigint | number
-          skinId?: bigint | number
+        const pet = (await this.contract.ownerToPets(wallet, tokenId)) as {
+          1: string
+          2: bigint | number
+          3: bigint | number
+          4: bigint | number
+          petName?: string
+          petIv?: bigint | number
+          petLevel?: bigint | number
+          petSkin?: bigint | number
         }
 
         return {
           tokenId: tokenId.toString(),
-          iv: Number(pet.iv ?? pet[0]),
-          skinId: Number(pet.skinId ?? pet[1]),
+          name: pet.petName ?? pet[1],
+          iv: Number(pet.petIv ?? pet[2]),
+          level: Number(pet.petLevel ?? pet[3]),
+          skinId: Number(pet.petSkin ?? pet[4]),
         }
       }),
     )
+  }
+
+  async mintStarterPet(wallet: WalletAddress, petName: string, iv: number): Promise<string> {
+    if (!('addPet' in this.contract) || typeof this.contract.addPet !== 'function') {
+      throw new Error('CHAIN_PET_MINTER_NOT_CONFIGURED')
+    }
+
+    const tx = await this.contract.addPet(petName, wallet, iv)
+    await tx.wait()
+    const tokenIds = (await this.contract.getUserPetId(wallet)) as bigint[]
+    const mintedTokenId = tokenIds[tokenIds.length - 1]
+
+    if (mintedTokenId === undefined) {
+      throw new Error('CHAIN_PET_MINT_FAILED')
+    }
+
+    return mintedTokenId.toString()
   }
 }
 
