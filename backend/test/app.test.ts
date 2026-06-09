@@ -17,7 +17,9 @@ const baseConfig: AppConfig = {
   materialsFromBlock: 11009614,
   deployerPrivateKey: '',
   adminApiKey: '',
-  marketCacheMs: 15000
+  marketCacheMs: 15000,
+  expeditionDbPath: ':memory:',
+  authNonceTtlMs: 300000
 }
 
 describe('backend app', () => {

@@ -15,6 +15,8 @@ export interface AppConfig {
   deployerPrivateKey: string
   adminApiKey: string
   marketCacheMs: number
+  expeditionDbPath: string
+  authNonceTtlMs: number
 }
 
 export class ConfigError extends Error {
@@ -33,7 +35,9 @@ const defaults = {
   cryptoMaterialsAddress: '0xA6E9ec01E2fb1e82db2602719c13D2cC15446E56',
   petsFromBlock: '11009607',
   materialsFromBlock: '11009614',
-  marketCacheMs: '15000'
+  marketCacheMs: '15000',
+  expeditionDbPath: 'backend/data/cryptopets.sqlite',
+  authNonceTtlMs: '300000'
 }
 
 export function loadEnvFiles() {
@@ -58,6 +62,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const petsFromBlock = readNumber(env.PETS_FROM_BLOCK, defaults.petsFromBlock, 'PETS_FROM_BLOCK')
   const materialsFromBlock = readNumber(env.MATERIALS_FROM_BLOCK, defaults.materialsFromBlock, 'MATERIALS_FROM_BLOCK')
   const marketCacheMs = readNumber(env.MARKET_CACHE_MS, defaults.marketCacheMs, 'MARKET_CACHE_MS')
+  const authNonceTtlMs = readNumber(env.AUTH_NONCE_TTL_MS, defaults.authNonceTtlMs, 'AUTH_NONCE_TTL_MS')
   const cryptoPetsAddress = env.CRYPTO_PETS_ADDRESS || defaults.cryptoPetsAddress
   const cryptoMaterialsAddress = env.CRYPTO_MATERIALS_ADDRESS || defaults.cryptoMaterialsAddress
 
@@ -80,7 +85,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     materialsFromBlock,
     deployerPrivateKey: env.DEPLOYER_PRIVATE_KEY || '',
     adminApiKey: env.ADMIN_API_KEY || '',
-    marketCacheMs
+    marketCacheMs,
+    expeditionDbPath: env.EXPEDITION_DB_PATH || defaults.expeditionDbPath,
+    authNonceTtlMs
   }
 }
 

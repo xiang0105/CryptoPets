@@ -51,6 +51,9 @@ secrets/
 
 .eslintcache
 
+backend/data/*.sqlite
+backend/data/*.sqlite-*
+
 # Cypress
 /cypress/videos/
 /cypress/screenshots/

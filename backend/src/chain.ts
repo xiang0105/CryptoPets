@@ -35,6 +35,11 @@ export interface SentTransactionDto {
   nonce: number
 }
 
+export interface ConfirmedTransactionDto extends SentTransactionDto {
+  blockNumber: number | null
+  status: number | null
+}
+
 export interface PetDto {
   tokenId: string
   owner: string
@@ -264,6 +269,14 @@ export class ChainServices {
     return this.sendAdminTx(this.config.cryptoMaterialsAddress, cryptoMaterialsAbi, functionName, args)
   }
 
+  async sendMaterialAdminTxAndWait(
+    functionName: string,
+    args: unknown[],
+    confirmations = 1
+  ): Promise<ConfirmedTransactionDto> {
+    return this.sendAdminTxAndWait(this.config.cryptoMaterialsAddress, cryptoMaterialsAbi, functionName, args, confirmations)
+  }
+
   private buildTx(address: string, contractInterface: Interface, functionName: string, args: unknown[], value: bigint) {
     return {
       to: address,
@@ -274,10 +287,7 @@ export class ChainServices {
   }
 
   private async sendAdminTx(address: string, abi: string[], functionName: string, args: unknown[]) {
-    const signer = this.getAdminSigner()
-    const contract = new Contract(address, abi, signer)
-    const method = contract.getFunction(functionName)
-    const tx = await method(...args)
+    const { signer, tx } = await this.submitAdminTx(address, abi, functionName, args)
 
     return {
       hash: tx.hash,
@@ -285,6 +295,39 @@ export class ChainServices {
       to: address,
       chainId: this.config.chainId,
       nonce: tx.nonce
+    }
+  }
+
+  private async sendAdminTxAndWait(
+    address: string,
+    abi: string[],
+    functionName: string,
+    args: unknown[],
+    confirmations: number
+  ) {
+    const { signer, tx } = await this.submitAdminTx(address, abi, functionName, args)
+    const receipt = await tx.wait(confirmations)
+
+    return {
+      hash: tx.hash,
+      from: await signer.getAddress(),
+      to: address,
+      chainId: this.config.chainId,
+      nonce: tx.nonce,
+      blockNumber: receipt?.blockNumber ?? null,
+      status: receipt?.status ?? null
+    }
+  }
+
+  private async submitAdminTx(address: string, abi: string[], functionName: string, args: unknown[]) {
+    const signer = this.getAdminSigner()
+    const contract = new Contract(address, abi, signer)
+    const method = contract.getFunction(functionName)
+    const tx = await method(...args)
+
+    return {
+      signer,
+      tx
     }
   }
 

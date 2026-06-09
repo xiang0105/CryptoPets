@@ -4,6 +4,7 @@ import helmet from 'helmet'
 import type { AppConfig } from './config.js'
 import { asyncRoute, errorHandler, HttpError, invalidRequest, notFound } from './errors.js'
 import type { ChainServices, SentTransactionDto, TransactionRequestDto } from './chain.js'
+import type { ExpeditionDetails, ExpeditionLogEntry } from './expeditionTypes.js'
 import {
   readAddress,
   readBody,
@@ -34,7 +35,15 @@ export interface BackendServices {
   sendMaterialAdminTx(functionName: string, args: unknown[]): Promise<SentTransactionDto>
 }
 
-export function createApp(config: AppConfig, services: BackendServices) {
+export interface ExpeditionApiServices {
+  createAuthNonce(body: unknown): unknown
+  startExpedition(body: unknown): Promise<ExpeditionDetails>
+  claimReward(body: unknown): Promise<ExpeditionDetails>
+  getActiveExpedition(wallet: unknown): ExpeditionDetails | null
+  getExpeditionLogs(wallet: unknown): ExpeditionLogEntry[]
+}
+
+export function createApp(config: AppConfig, services: BackendServices, expeditionServices?: ExpeditionApiServices) {
   const app = express()
 
   app.use(helmet())
@@ -48,6 +57,26 @@ export function createApp(config: AppConfig, services: BackendServices) {
   app.get('/contracts', (_request, response) => {
     response.json(services.getContracts())
   })
+
+  app.post('/auth/nonce', asyncRoute(async (request, response) => {
+    response.json(requireExpeditionService(expeditionServices).createAuthNonce(request.body))
+  }))
+
+  app.post('/start-expedition', asyncRoute(async (request, response) => {
+    response.json(await requireExpeditionService(expeditionServices).startExpedition(request.body))
+  }))
+
+  app.post('/claim-reward', asyncRoute(async (request, response) => {
+    response.json(await requireExpeditionService(expeditionServices).claimReward(request.body))
+  }))
+
+  app.get('/wallets/:wallet/expedition', asyncRoute(async (request, response) => {
+    response.json(requireExpeditionService(expeditionServices).getActiveExpedition(request.params.wallet))
+  }))
+
+  app.get('/wallets/:wallet/expedition/logs', asyncRoute(async (request, response) => {
+    response.json(requireExpeditionService(expeditionServices).getExpeditionLogs(request.params.wallet))
+  }))
 
   app.get('/pets/total', asyncRoute(async (_request, response) => {
     response.json({ total: await services.getTotalPets() })
@@ -302,6 +331,14 @@ export function createApp(config: AppConfig, services: BackendServices) {
   app.use(errorHandler)
 
   return app
+}
+
+function requireExpeditionService(expeditionServices: ExpeditionApiServices | undefined) {
+  if (!expeditionServices) {
+    throw new HttpError(503, 'EXPEDITION_SERVICE_NOT_CONFIGURED', 'Expedition service is not configured')
+  }
+
+  return expeditionServices
 }
 
 function requireAdmin(config: AppConfig) {
