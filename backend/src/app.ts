@@ -43,7 +43,16 @@ export interface ExpeditionApiServices {
   getExpeditionLogs(wallet: unknown): ExpeditionLogEntry[]
 }
 
-export function createApp(config: AppConfig, services: BackendServices, expeditionServices?: ExpeditionApiServices) {
+export interface StarterPetApiServices {
+  getWalletPets(wallet: string): Promise<unknown>
+}
+
+export function createApp(
+  config: AppConfig,
+  services: BackendServices,
+  expeditionServices?: ExpeditionApiServices,
+  starterPetServices?: StarterPetApiServices
+) {
   const app = express()
 
   app.use(helmet())
@@ -89,7 +98,8 @@ export function createApp(config: AppConfig, services: BackendServices, expediti
 
   app.get('/wallets/:wallet/pets', asyncRoute(async (request, response) => {
     const wallet = readAddress(request.params.wallet, 'wallet')
-    response.json({ wallet, pets: await services.getWalletPets(wallet) })
+    const petReader = starterPetServices ?? services
+    response.json({ wallet, pets: await petReader.getWalletPets(wallet) })
   }))
 
   app.get('/market/pets', asyncRoute(async (_request, response) => {

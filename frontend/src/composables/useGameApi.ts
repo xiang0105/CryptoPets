@@ -3,7 +3,6 @@ import type {
   ExpeditionSummary,
   ExpeditionLogEntry,
   ExpeditionType,
-  FriendSummary,
   MaterialBackpack,
   MarketListing,
   PlayerProfile,
@@ -12,28 +11,28 @@ import type {
 } from '@cryptopets/shared'
 import { materialDefinitions, starterCapybaraByName } from '@cryptopets/game-content'
 import {
-  addFriend,
   buyMarketListing,
   cancelMarketListing,
-  claimReward,
+  claimSignedReward,
   getExpeditionLogs,
-  getFriends,
   getMarketListings,
   getMaterialBackpack,
   getPlayer,
   getResources,
   getTransactions,
   listMarketMaterial,
-  startExpedition,
+  startSignedExpedition,
 } from '@/api/game'
+import { requestClaimRewardNonce, requestStartExpeditionNonce } from '@/api/auth'
 import type { GoodieSft, ListingStatus } from '@/data/goodies'
 import type { Pet } from '@/data/pets'
 import { replacePets } from '@/data/pets'
 import { getAuthToken } from '@/api/client'
 import { translateApiError } from '@/api/errors'
+import { useWallet } from '@/composables/useWallet'
 
-type QueryKey = 'player' | 'resources' | 'backpack' | 'friends' | 'marketListings' | 'transactions' | 'expeditionLogs'
-type OperationKey = 'startExpedition' | 'claimReward' | 'addFriend' | 'listMarketMaterial' | 'cancelListing' | 'buyListing'
+type QueryKey = 'player' | 'resources' | 'backpack' | 'marketListings' | 'transactions' | 'expeditionLogs'
+type OperationKey = 'startExpedition' | 'claimReward' | 'listMarketMaterial' | 'cancelListing' | 'buyListing'
 type QueryOptions = {
   force?: boolean
 }
@@ -44,7 +43,6 @@ const QUERY_FRESH_MS = 30_000
 const playerProfile = ref<PlayerProfile | null>(null)
 const resources = ref<PlayerResources | null>(null)
 const materialBackpack = ref<MaterialBackpack | null>(null)
-const friends = ref<FriendSummary[]>([])
 const marketListings = ref<MarketListing[]>([])
 const transactions = ref<PlayerTransaction[]>([])
 const activeExpedition = ref<ExpeditionSummary | null>(null)
@@ -54,7 +52,6 @@ const queryLoading = reactive<Record<QueryKey, boolean>>({
   player: false,
   resources: false,
   backpack: false,
-  friends: false,
   marketListings: false,
   transactions: false,
   expeditionLogs: false,
@@ -64,7 +61,6 @@ const queryError = reactive<Record<QueryKey, string>>({
   player: '',
   resources: '',
   backpack: '',
-  friends: '',
   marketListings: '',
   transactions: '',
   expeditionLogs: '',
@@ -73,7 +69,6 @@ const queryLoadedAt = reactive<Record<QueryKey, number>>({
   player: 0,
   resources: 0,
   backpack: 0,
-  friends: 0,
   marketListings: 0,
   transactions: 0,
   expeditionLogs: 0,
@@ -83,7 +78,6 @@ const queryInFlight: Partial<Record<QueryKey, Promise<unknown>>> = {}
 const operationLoading = reactive<Record<OperationKey, boolean>>({
   startExpedition: false,
   claimReward: false,
-  addFriend: false,
   listMarketMaterial: false,
   cancelListing: false,
   buyListing: false,
@@ -92,7 +86,6 @@ const operationLoading = reactive<Record<OperationKey, boolean>>({
 const operationError = reactive<Record<OperationKey, string>>({
   startExpedition: '',
   claimReward: '',
-  addFriend: '',
   listMarketMaterial: '',
   cancelListing: '',
   buyListing: '',
@@ -124,7 +117,6 @@ const hasLoadedAnyApi = computed(() =>
     playerProfile.value ||
       resources.value ||
       materialBackpack.value ||
-      friends.value.length ||
       marketListings.value.length ||
       transactions.value.length,
   ),
@@ -244,7 +236,35 @@ function materialInventoryItemToGoodie(materialId: string, amount: number): Good
 }
 
 function shouldUseProtectedApi() {
-  return Boolean(getAuthToken())
+  const { walletAddress } = useWallet()
+  return Boolean(getAuthToken() || walletAddress.value)
+}
+
+function requireWalletAddress() {
+  const { walletAddress } = useWallet()
+
+  if (!walletAddress.value) {
+    throw new Error('AUTH_REQUIRED')
+  }
+
+  return walletAddress.value
+}
+
+async function signAuthMessage(wallet: string, message: string) {
+  if (!window.ethereum) {
+    throw new Error('MetaMask is not installed. Please install or enable MetaMask to continue.')
+  }
+
+  const signature = await window.ethereum.request({
+    method: 'personal_sign',
+    params: [message, wallet],
+  })
+
+  if (typeof signature !== 'string') {
+    throw new Error('Wallet signature failed')
+  }
+
+  return signature
 }
 
 async function loadPlayerProfile(options: QueryOptions = {}) {
@@ -259,7 +279,7 @@ async function loadPlayerProfile(options: QueryOptions = {}) {
 
   return runQuery(
     'player',
-    getPlayer,
+    () => getPlayer(requireWalletAddress()),
     (profile) => {
       playerProfile.value = profile
       activeExpedition.value = profile.activeExpedition
@@ -280,7 +300,7 @@ async function loadResources(options: QueryOptions = {}) {
     return resources.value
   }
 
-  return runQuery('resources', getResources, (nextResources) => {
+  return runQuery('resources', () => getResources(requireWalletAddress()), (nextResources) => {
     resources.value = nextResources
   }, 'Resources load failed', options)
 }
@@ -295,28 +315,13 @@ async function loadMaterialBackpack(options: QueryOptions = {}) {
     return materialBackpack.value
   }
 
-  return runQuery('backpack', getMaterialBackpack, (nextBackpack) => {
+  return runQuery('backpack', () => getMaterialBackpack(requireWalletAddress()), (nextBackpack) => {
     materialBackpack.value = nextBackpack
     resources.value = {
       sepoliaBalance: nextBackpack.sepoliaBalance,
       inventory: nextBackpack.inventory,
     }
   }, 'Backpack load failed', options)
-}
-
-async function loadFriends(options: QueryOptions = {}) {
-  if (!shouldUseProtectedApi()) {
-    queryError.friends = translateApiError(new Error('AUTH_REQUIRED'), 'Friends load failed')
-    throw new Error('AUTH_REQUIRED')
-  }
-
-  if (shouldSkipQuery('friends', options, friends.value.length > 0)) {
-    return friends.value
-  }
-
-  return runQuery('friends', getFriends, (nextFriends) => {
-    friends.value = nextFriends
-  }, 'Friends load failed', options)
 }
 
 async function loadMarketListings(options: QueryOptions = {}) {
@@ -359,7 +364,7 @@ async function loadExpeditionLogs(options: QueryOptions = {}) {
     return expeditionLogs.value
   }
 
-  return runQuery('expeditionLogs', getExpeditionLogs, (nextLogs) => {
+  return runQuery('expeditionLogs', () => getExpeditionLogs(requireWalletAddress()), (nextLogs) => {
     expeditionLogs.value = nextLogs
   }, 'Expedition logs load failed', options)
 }
@@ -369,7 +374,6 @@ async function loadAllApiData(options: QueryOptions = {}) {
     loadPlayerProfile(options),
     loadResources(options),
     loadMaterialBackpack(options),
-    loadFriends(options),
     loadMarketListings(options),
     loadTransactions(options),
     loadExpeditionLogs(options),
@@ -384,7 +388,20 @@ async function startTeamExpedition(petIds: string[], expeditionType: ExpeditionT
 
   const summary = await runOperation(
     'startExpedition',
-    () => startExpedition(petIds, expeditionType),
+    async () => {
+      const wallet = requireWalletAddress()
+      const challenge = await requestStartExpeditionNonce(wallet, petIds, expeditionType)
+      const signature = await signAuthMessage(wallet, challenge.message)
+
+      return startSignedExpedition({
+        wallet,
+        petIds,
+        expeditionType,
+        nonce: challenge.nonce,
+        message: challenge.message,
+        signature,
+      })
+    },
     'Expedition start failed',
   )
 
@@ -404,7 +421,19 @@ async function claimActiveExpedition(expeditionId: string) {
 
   const summary = await runOperation(
     'claimReward',
-    () => claimReward(expeditionId),
+    async () => {
+      const wallet = requireWalletAddress()
+      const challenge = await requestClaimRewardNonce(wallet, expeditionId)
+      const signature = await signAuthMessage(wallet, challenge.message)
+
+      return claimSignedReward({
+        wallet,
+        expeditionId,
+        nonce: challenge.nonce,
+        message: challenge.message,
+        signature,
+      })
+    },
     'Reward claim failed',
   )
 
@@ -417,12 +446,6 @@ async function claimActiveExpedition(expeditionId: string) {
     loadExpeditionLogs({ force: true }),
   ])
   return summary
-}
-
-async function requestAddFriend(wallet: string) {
-  const result = await runOperation('addFriend', () => addFriend(wallet), 'Friend request failed')
-  await loadFriends({ force: true }).catch(() => undefined)
-  return result
 }
 
 async function requestListMarketMaterial(materialId: string, amount: number, price: number) {
@@ -467,7 +490,6 @@ export function useGameApi() {
     activeExpedition,
     activeMarketGoodies,
     expeditionLogs,
-    friends,
     hasLoadedAnyApi,
     marketListings,
     materialBackpackGoodies,
@@ -484,13 +506,11 @@ export function useGameApi() {
     claimActiveExpedition,
     loadAllApiData,
     loadExpeditionLogs,
-    loadFriends,
     loadMarketListings,
     loadMaterialBackpack,
     loadPlayerProfile,
     loadResources,
     loadTransactions,
-    requestAddFriend,
     requestBuyListing,
     requestCancelListing,
     requestListMarketMaterial,

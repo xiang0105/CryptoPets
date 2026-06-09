@@ -1,7 +1,6 @@
 import { computed, ref } from 'vue'
 import type { PlayerProfile } from '@cryptopets/shared'
-import { loginWithSignature, requestLoginNonce } from '@/api/auth'
-import { clearAuthToken, getAuthToken } from '@/api/client'
+import { clearAuthToken } from '@/api/client'
 import { getPlayer } from '@/api/game'
 
 type WalletResetReason = 'none' | 'accountChanged' | 'chainChanged' | 'walletDisconnected'
@@ -38,7 +37,7 @@ const shortWalletAddress = computed(() => {
 })
 
 const isWalletInstalled = computed(() => Boolean(window.ethereum))
-const isSessionAuthenticated = computed(() => Boolean(player.value && getAuthToken()))
+const isSessionAuthenticated = computed(() => Boolean(walletAddress.value))
 const isSupportedChain = computed(() => !expectedChainId || !chainId.value || chainId.value === expectedChainId)
 const expectedChainLabel = computed(() => expectedChainId ? Number.parseInt(expectedChainId, 16).toString() : '')
 
@@ -126,25 +125,7 @@ async function connectWallet() {
     const wallet = accounts[0]
     walletAddress.value = wallet
 
-    const challenge = await requestLoginNonce(wallet)
-    const signature = await window.ethereum.request({
-      method: 'personal_sign',
-      params: [challenge.message, wallet],
-    })
-
-    if (typeof signature !== 'string') {
-      throw new Error('Wallet signature failed')
-    }
-
-    const session = await loginWithSignature({
-      wallet,
-      nonce: challenge.nonce,
-      message: challenge.message,
-      signature,
-    })
-
-    walletAddress.value = session.player.wallet
-    player.value = session.player
+    player.value = null
     walletNotice.value = ''
     walletResetReason.value = 'none'
   } catch (error) {
@@ -156,12 +137,19 @@ async function connectWallet() {
 }
 
 async function restoreSession() {
-  if (!getAuthToken()) {
+  if (!window.ethereum) {
     return
   }
 
   try {
-    player.value = await getPlayer()
+    const accounts = await window.ethereum.request({ method: 'eth_accounts' })
+
+    if (!Array.isArray(accounts) || typeof accounts[0] !== 'string') {
+      return
+    }
+
+    walletAddress.value = accounts[0]
+    player.value = await getPlayer(accounts[0])
     walletAddress.value = player.value.wallet
   } catch {
     clearWalletSession('none', '', '')

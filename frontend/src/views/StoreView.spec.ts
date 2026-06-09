@@ -15,7 +15,6 @@ const mockQueryError = reactive({
   player: '',
   resources: '',
   backpack: '',
-  friends: '',
   marketListings: '',
   transactions: '',
 })
@@ -23,14 +22,12 @@ const mockQueryLoading = reactive({
   player: false,
   resources: false,
   backpack: false,
-  friends: false,
   marketListings: false,
   transactions: false,
 })
 const mockOperationError = reactive({
   startExpedition: '',
   claimReward: '',
-  addFriend: '',
   listMarketMaterial: '',
   cancelListing: '',
   buyListing: '',
@@ -38,7 +35,6 @@ const mockOperationError = reactive({
 const mockOperationLoading = reactive({
   startExpedition: false,
   claimReward: false,
-  addFriend: false,
   listMarketMaterial: false,
   cancelListing: false,
   buyListing: false,

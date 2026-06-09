@@ -161,7 +161,7 @@ function openInventoryModal() {
   listingPrice.value = 0.00000000001
   listingAmount.value = Math.min(listingAmount.value, maxListingAmount.value)
   isInventoryModalOpen.value = true
-  void loadMaterialBackpack({ force: true })
+  void loadMaterialBackpack({ force: true }).catch(() => undefined)
 }
 
 function closeInventoryModal() {
@@ -246,24 +246,24 @@ function goShelfArea(direction: -1 | 1) {
 }
 
 function retryMarketData() {
-  void loadPlayerProfile({ force: true })
-  void loadMarketListings({ force: true })
-  void loadTransactions({ force: true })
+  void loadPlayerProfile({ force: true }).catch(() => undefined)
+  void loadMarketListings({ force: true }).catch(() => undefined)
+  void loadTransactions({ force: true }).catch(() => undefined)
 }
 
 function retryTransactions() {
-  void loadTransactions({ force: true })
+  void loadTransactions({ force: true }).catch(() => undefined)
 }
 
 function retryBackpack() {
-  void loadMaterialBackpack({ force: true })
+  void loadMaterialBackpack({ force: true }).catch(() => undefined)
 }
 
 onMounted(() => {
-  void loadPlayerProfile()
-  void loadMarketListings()
-  void loadTransactions()
-  void loadMaterialBackpack()
+  void loadPlayerProfile().catch(() => undefined)
+  void loadMarketListings().catch(() => undefined)
+  void loadTransactions().catch(() => undefined)
+  void loadMaterialBackpack().catch(() => undefined)
 })
 </script>
 

@@ -12,7 +12,6 @@ const mockQueryError = reactive({
   player: '',
   resources: '',
   backpack: '',
-  friends: '',
   marketListings: '',
   transactions: '',
 })
@@ -20,21 +19,18 @@ const mockQueryLoading = reactive({
   player: false,
   resources: false,
   backpack: false,
-  friends: false,
   marketListings: false,
   transactions: false,
 })
 const mockOperationError = reactive({
   startExpedition: '',
   claimReward: '',
-  addFriend: '',
   listMarketMaterial: '',
   cancelListing: '',
   buyListing: '',
 })
 
 const loadPlayerProfile = vi.fn()
-const loadFriends = vi.fn()
 
 vi.mock('@/composables/useGameApi', () => ({
   useGameApi: () => ({
@@ -42,7 +38,6 @@ vi.mock('@/composables/useGameApi', () => ({
     playerProfile: mockPlayerProfile,
     queryError: mockQueryError,
     queryLoading: mockQueryLoading,
-    loadFriends,
     loadPlayerProfile,
   }),
 }))
@@ -127,7 +122,6 @@ beforeEach(() => {
     mockOperationError[key as keyof typeof mockOperationError] = ''
   })
   loadPlayerProfile.mockReset().mockResolvedValue(undefined)
-  loadFriends.mockReset().mockResolvedValue(undefined)
 })
 
 describe('PetsView', () => {

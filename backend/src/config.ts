@@ -1,6 +1,7 @@
 import dotenv from 'dotenv'
 import { existsSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { isAddress } from 'ethers'
 
 export interface AppConfig {
@@ -26,6 +27,8 @@ export class ConfigError extends Error {
   }
 }
 
+const backendRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+
 const defaults = {
   port: '3400',
   corsOrigin: 'http://localhost:5400',
@@ -36,7 +39,7 @@ const defaults = {
   petsFromBlock: '11009607',
   materialsFromBlock: '11009614',
   marketCacheMs: '15000',
-  expeditionDbPath: 'backend/data/cryptopets.sqlite',
+  expeditionDbPath: resolve(backendRoot, 'data/cryptopets.sqlite'),
   authNonceTtlMs: '300000'
 }
 

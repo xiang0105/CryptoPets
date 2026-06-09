@@ -24,6 +24,14 @@ export interface NonceRecord {
   createdAt: string
 }
 
+export interface StarterPetGrantRecord {
+  wallet: string
+  petNames: string[]
+  ivs: number[]
+  txHashes: string[]
+  grantedAt: string
+}
+
 interface ExpeditionRow {
   id: string
   wallet: string
@@ -59,6 +67,14 @@ interface NonceRow {
   expires_at: string
   used_at: string | null
   created_at: string
+}
+
+interface StarterPetGrantRow {
+  wallet: string
+  pet_names: string
+  ivs: string
+  tx_hashes: string
+  granted_at: string
 }
 
 export class ExpeditionStore {
@@ -97,6 +113,24 @@ export class ExpeditionStore {
 
   markNonceUsed(nonce: string, usedAt: string) {
     this.db.prepare('update auth_nonces set used_at = ? where nonce = ? and used_at is null').run(usedAt, nonce)
+  }
+
+  getStarterPetGrant(wallet: string): StarterPetGrantRecord | null {
+    const row = this.db.prepare('select * from starter_pet_grants where wallet = ?').get(wallet) as StarterPetGrantRow | undefined
+    return row ? mapStarterPetGrant(row) : null
+  }
+
+  createStarterPetGrant(record: StarterPetGrantRecord) {
+    this.db.prepare(`
+      insert into starter_pet_grants (wallet, pet_names, ivs, tx_hashes, granted_at)
+      values (@wallet, @petNames, @ivs, @txHashes, @grantedAt)
+    `).run({
+      wallet: record.wallet,
+      petNames: JSON.stringify(record.petNames),
+      ivs: JSON.stringify(record.ivs),
+      txHashes: JSON.stringify(record.txHashes),
+      grantedAt: record.grantedAt
+    })
   }
 
   getActiveExpedition(wallet: string): ExpeditionDetails | null {
@@ -272,6 +306,14 @@ export class ExpeditionStore {
         variant text
       );
 
+      create table if not exists starter_pet_grants (
+        wallet text primary key,
+        pet_names text not null,
+        ivs text not null,
+        tx_hashes text not null,
+        granted_at text not null
+      );
+
       create index if not exists auth_nonces_wallet_idx on auth_nonces(wallet);
       create index if not exists expeditions_wallet_status_idx on expeditions(wallet, status);
       create index if not exists expedition_logs_wallet_time_idx on expedition_logs(wallet, occurred_at);
@@ -303,5 +345,15 @@ function mapLog(row: ExpeditionLogRow): ExpeditionLogEntry {
       en: row.message_en
     },
     variant: row.variant
+  }
+}
+
+function mapStarterPetGrant(row: StarterPetGrantRow): StarterPetGrantRecord {
+  return {
+    wallet: row.wallet,
+    petNames: JSON.parse(row.pet_names) as string[],
+    ivs: JSON.parse(row.ivs) as number[],
+    txHashes: JSON.parse(row.tx_hashes) as string[],
+    grantedAt: row.granted_at
   }
 }

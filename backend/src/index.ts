@@ -4,6 +4,7 @@ import { ChainServices } from './chain.js'
 import { ConfigError, loadConfig, loadEnvFiles } from './config.js'
 import { ExpeditionService } from './expeditionService.js'
 import { ExpeditionStore } from './expeditionStore.js'
+import { StarterPetService } from './starterPetService.js'
 
 loadEnvFiles()
 
@@ -13,7 +14,8 @@ try {
   const expeditionStore = new ExpeditionStore(config.expeditionDbPath)
   const authService = new AuthService(config, expeditionStore)
   const expeditionService = new ExpeditionService(expeditionStore, authService, services)
-  const app = createApp(config, services, expeditionService)
+  const starterPetService = new StarterPetService(expeditionStore, services)
+  const app = createApp(config, services, expeditionService, starterPetService)
 
   app.listen(config.port, () => {
     console.log(`CryptoPets backend listening on port ${config.port}`)

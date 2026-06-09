@@ -25,7 +25,7 @@ PETS_FROM_BLOCK=11009607
 MATERIALS_FROM_BLOCK=11009614
 DEPLOYER_PRIVATE_KEY=replace-with-owner-private-key
 ADMIN_API_KEY=replace-with-a-long-random-admin-key
-EXPEDITION_DB_PATH=backend/data/cryptopets.sqlite
+EXPEDITION_DB_PATH=data/cryptopets.sqlite
 ```
 
 ## 共用格式

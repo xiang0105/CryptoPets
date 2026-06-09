@@ -12,7 +12,6 @@ const mockExpeditionLogs = ref<ExpeditionLogEntry[]>([])
 const mockOperationError = reactive({
   startExpedition: '',
   claimReward: '',
-  addFriend: '',
   listMarketMaterial: '',
   cancelListing: '',
   buyListing: '',
@@ -20,7 +19,6 @@ const mockOperationError = reactive({
 const mockOperationLoading = reactive({
   startExpedition: false,
   claimReward: false,
-  addFriend: false,
   listMarketMaterial: false,
   cancelListing: false,
   buyListing: false,
@@ -29,7 +27,6 @@ const mockQueryError = reactive({
   player: '',
   resources: '',
   backpack: '',
-  friends: '',
   marketListings: '',
   transactions: '',
 })
@@ -37,7 +34,6 @@ const mockQueryLoading = reactive({
   player: false,
   resources: false,
   backpack: false,
-  friends: false,
   marketListings: false,
   transactions: false,
 })
@@ -149,7 +145,7 @@ describe('HomeView expedition smoke', () => {
     await orangeStart!.trigger('click')
     await flushPromises()
 
-    expect(startTeamExpedition).toHaveBeenCalledWith(['pet-1'], 'orange')
+    expect(startTeamExpedition).toHaveBeenCalledWith(['7'], 'orange')
     expect(loadExpeditionLogs).toHaveBeenCalledWith({ force: true })
     expect(wrapper.text()).toContain('Orange Forest')
   })

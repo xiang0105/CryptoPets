@@ -1,24 +1,25 @@
-import type { AuthLoginResponse, AuthNonceResponse } from '@cryptopets/shared'
-import { apiRequest, setAuthToken } from './client'
+import type { AuthNonceResponse, ExpeditionType } from '@cryptopets/shared'
+import { apiRequest } from './client'
 
-export async function requestLoginNonce(wallet: string) {
+export function requestStartExpeditionNonce(wallet: string, petIds: string[], expeditionType: ExpeditionType) {
   return apiRequest<AuthNonceResponse>('/auth/nonce', {
     method: 'POST',
-    body: JSON.stringify({ wallet }),
+    body: JSON.stringify({
+      wallet,
+      action: 'start-expedition',
+      petIds,
+      expeditionType,
+    }),
   })
 }
 
-export async function loginWithSignature(payload: {
-  wallet: string
-  nonce: string
-  message: string
-  signature: string
-}) {
-  const response = await apiRequest<AuthLoginResponse>('/auth/login', {
+export function requestClaimRewardNonce(wallet: string, expeditionId: string) {
+  return apiRequest<AuthNonceResponse>('/auth/nonce', {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      wallet,
+      action: 'claim-reward',
+      expeditionId,
+    }),
   })
-
-  setAuthToken(response.token)
-  return response
 }

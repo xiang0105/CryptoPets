@@ -160,7 +160,7 @@ watch(selectedMaterial, () => {
 
 onMounted(() => {
   void loadMaterialBackpack().catch(() => undefined)
-  void loadResources()
+  void loadResources().catch(() => undefined)
 })
 
 onBeforeUnmount(() => {

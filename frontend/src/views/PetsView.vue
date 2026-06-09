@@ -17,7 +17,7 @@ const skillLevels = ref([1, 1, 1])
 const nurtureMessage = ref('')
 const availableSkillPoints = computed(() => 0)
 
-const { operationError, playerProfile, queryError, queryLoading, loadFriends, loadPlayerProfile } = useGameApi()
+const { operationError, playerProfile, queryError, queryLoading, loadPlayerProfile } = useGameApi()
 
 const breakthroughMaterials = [
   { id: 'MAT-2C', count: 3 },
@@ -212,7 +212,6 @@ async function retryPlayerProfile() {
 onMounted(() => {
   syncLocalPetsFromApi()
   void loadPlayerProfile().catch(() => undefined).finally(syncLocalPetsFromApi)
-  void loadFriends()
 })
 </script>
 

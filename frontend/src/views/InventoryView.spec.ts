@@ -11,7 +11,6 @@ const mockQueryError = reactive({
   player: '',
   resources: '',
   backpack: '',
-  friends: '',
   marketListings: '',
   transactions: '',
 })
@@ -19,7 +18,6 @@ const mockQueryLoading = reactive({
   player: false,
   resources: false,
   backpack: false,
-  friends: false,
   marketListings: false,
   transactions: false,
 })

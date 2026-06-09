@@ -213,7 +213,7 @@ async function startExpedition(forest: ForestOption) {
   }
 
   lastSelectedForest.value = forest
-  const teamPetIds = currentExpeditionTeam().map((pet) => pet.id)
+  const teamPetIds = currentExpeditionTeam().map((pet) => pet.tokenId)
   let apiSummary
 
   try {

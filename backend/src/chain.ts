@@ -265,6 +265,30 @@ export class ChainServices {
     return this.sendAdminTx(this.config.cryptoPetsAddress, cryptoPetsAbi, functionName, args)
   }
 
+  getPetAdminAddress() {
+    if (!this.config.deployerPrivateKey) {
+      return null
+    }
+
+    try {
+      return new Wallet(this.config.deployerPrivateKey).address
+    } catch {
+      return null
+    }
+  }
+
+  async getPetContractOwner() {
+    return getAddress(await this.pets.owner())
+  }
+
+  async sendPetAdminTxAndWait(
+    functionName: string,
+    args: unknown[],
+    confirmations = 1
+  ): Promise<ConfirmedTransactionDto> {
+    return this.sendAdminTxAndWait(this.config.cryptoPetsAddress, cryptoPetsAbi, functionName, args, confirmations)
+  }
+
   async sendMaterialAdminTx(functionName: string, args: unknown[]): Promise<SentTransactionDto> {
     return this.sendAdminTx(this.config.cryptoMaterialsAddress, cryptoMaterialsAbi, functionName, args)
   }
