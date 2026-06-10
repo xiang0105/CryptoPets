@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@cryptopets/game-content": "file:../game-content",
     "better-sqlite3": "^12.10.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",

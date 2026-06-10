@@ -182,7 +182,7 @@ async function buyGoodie(goodie: GoodieSft) {
   try {
     await requestBuyListing(goodie.id)
     const name = displayName(goodie)
-    storeNotice.value = `${text.value.bought} ${name}`
+    storeNotice.value = isZh.value ? `已建立待處理購買：${name}` : `Purchase pending: ${name}`
   } catch {
     storeNotice.value = operationError.buyListing
   }
@@ -322,7 +322,9 @@ onMounted(() => {
               {{ gradeLabel(goodie.grade) }}
             </span>
           </header>
-          <div class="image-slot" aria-label="Product image placeholder"></div>
+          <div class="image-slot" aria-label="Product image">
+            <img v-if="goodie.imageUrl" :src="goodie.imageUrl" :alt="displayName(goodie)" draggable="false" />
+          </div>
           <footer>
             <div class="price-line">
               <i aria-hidden="true"></i>
@@ -420,7 +422,9 @@ onMounted(() => {
                       {{ gradeLabel(goodie.grade) }}
                     </span>
                   </header>
-                  <div class="mini-image" aria-hidden="true"></div>
+                  <div class="mini-image" aria-hidden="true">
+                    <img v-if="goodie.imageUrl" :src="goodie.imageUrl" :alt="displayName(goodie)" draggable="false" />
+                  </div>
                   <footer>
                     <span class="mini-price"><i aria-hidden="true"></i>{{ formatSepoliaPrice(goodie.price) }}</span>
                     <button
@@ -516,7 +520,8 @@ onMounted(() => {
                 </span>
                 <span class="material-name">{{ displayName(goodie) }}</span>
                 <span class="material-frame">
-                  <span class="material-icon" :class="`material-${goodie.element}`"></span>
+                  <img v-if="goodie.imageUrl" class="material-image" :src="goodie.imageUrl" :alt="displayName(goodie)" draggable="false" />
+                  <span v-else class="material-icon" :class="`material-${goodie.element}`"></span>
                 </span>
                 <span class="inventory-action"><i aria-hidden="true"></i>{{ storeCopy.select }}</span>
                 <small>x{{ goodie.amount }}</small>
@@ -528,7 +533,14 @@ onMounted(() => {
           </div>
 
           <aside v-if="selectedInventoryGoodie" class="inventory-detail">
-            <span class="material-icon large" :class="`material-${selectedInventoryGoodie.element}`"></span>
+            <img
+              v-if="selectedInventoryGoodie.imageUrl"
+              class="material-image large"
+              :src="selectedInventoryGoodie.imageUrl"
+              :alt="displayName(selectedInventoryGoodie)"
+              draggable="false"
+            />
+            <span v-else class="material-icon large" :class="`material-${selectedInventoryGoodie.element}`"></span>
             <strong>{{ displayName(selectedInventoryGoodie) }}</strong>
             <small>{{ selectedInventoryGoodie.description }}</small>
             <label>
@@ -885,6 +897,16 @@ onMounted(() => {
   align-self: center;
 }
 
+.image-slot img,
+.mini-image img,
+.material-image {
+  display: block;
+  width: 86%;
+  height: 86%;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 0 rgba(64, 43, 36, 0.16));
+}
+
 .goodie-card footer {
   display: grid;
   gap: 4px;
@@ -1120,7 +1142,6 @@ onMounted(() => {
   color: #6d361e;
   font: inherit;
   text-align: left;
-  cursor: pointer;
   background: #fff2c9;
   border: 5px solid #36291f;
   border-radius: 999px;
@@ -1841,13 +1862,16 @@ onMounted(() => {
   box-shadow: inset 0 0 0 2px rgba(75, 75, 75, 0.22);
 }
 
-.material-icon {
+.material-icon,
+.material-image {
   display: block;
   justify-self: center;
   width: 38px;
   height: 38px;
+  object-fit: contain;
   background: #e7a23f;
   border: 2px solid rgba(255, 247, 223, 0.75);
+  border-radius: 7px;
   box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.28);
 }
 
@@ -1884,7 +1908,8 @@ onMounted(() => {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
-.material-icon.large {
+.material-icon.large,
+.material-image.large {
   width: 78px;
   height: 78px;
 }

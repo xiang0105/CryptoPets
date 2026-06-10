@@ -48,13 +48,16 @@ interface WalletMaterialsResponse {
 }
 
 interface MaterialMarketResponse {
-  listings: Array<{
-    listingId: string
-    seller: string
-    materialId: string
-    amount: string
-    priceWei: string
-  }>
+  listings: MarketListing[]
+}
+
+interface MaterialListingResponse {
+  listing: MarketListing
+}
+
+interface TransactionsResponse {
+  wallet: string
+  transactions: PlayerTransaction[]
 }
 
 interface TransactionRequestDto {
@@ -65,6 +68,7 @@ interface TransactionRequestDto {
 }
 
 const fallbackChainId = Number(import.meta.env.VITE_CHAIN_ID || 11155111)
+const discardAddress = '0x000000000000000000000000000000000000dEaD'
 
 export async function getPlayer(wallet: string) {
   const [contracts, petsResponse, activeExpedition] = await Promise.all([
@@ -106,7 +110,7 @@ export async function getMaterialBackpack(wallet: string) {
   return {
     sepoliaBalance: '0',
     inventory: balancesResponse.balances.map((balance) => ({
-      materialId: balance.materialId,
+      materialId: chainMaterialIdToContentId(balance.materialId),
       amount: Number(balance.amount),
       updatedAt: new Date().toISOString(),
     })),
@@ -152,95 +156,67 @@ export function getExpeditionLogs(wallet: string) {
 export async function getMarketListings() {
   const response = await apiRequest<MaterialMarketResponse>('/market/materials')
 
-  return response.listings.map((listing) => ({
-    id: listing.listingId,
-    sellerId: listing.seller,
-    sellerWallet: listing.seller as MarketListing['sellerWallet'],
-    materialId: chainMaterialIdToContentId(listing.materialId),
-    amount: Number(listing.amount),
-    price: Number(listing.priceWei) / 1e18,
-    status: 'active',
-    buyerId: null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  })) satisfies MarketListing[]
+  return response.listings
 }
 
-export async function listMarketMaterial(materialId: string, amount: number, price: number) {
+export async function listMarketMaterial(wallet: string, materialId: string, amount: number, price: number) {
   const payload: ListMarketMaterialRequest = { materialId, amount, price }
-  const transaction = await apiRequest<TransactionRequestDto>('/tx/materials/list', {
+  const response = await apiRequest<MaterialListingResponse>('/market/materials', {
     method: 'POST',
     body: JSON.stringify({
-      materialId: contentMaterialIdToChainId(payload.materialId),
-      amount: String(payload.amount),
-      priceWei: decimalEthToWei(payload.price),
+      sellerWallet: wallet,
+      materialId: payload.materialId,
+      amount: payload.amount,
+      price: payload.price,
+    }),
+  })
+
+  return response.listing
+}
+
+export async function discardMaterial(wallet: string, materialId: string, amount: number) {
+  const transaction = await apiRequest<TransactionRequestDto>('/tx/materials/transfer', {
+    method: 'POST',
+    body: JSON.stringify({
+      from: wallet,
+      to: discardAddress,
+      materialId: contentMaterialIdToChainId(materialId),
+      amount: String(amount),
+      data: '0x',
     }),
   })
 
   await sendWalletTransaction(transaction)
-
-  return {
-    id: `pending-${Date.now()}`,
-    sellerId: '',
-    sellerWallet: null,
-    materialId: payload.materialId,
-    amount: payload.amount,
-    price: payload.price,
-    status: 'active',
-    buyerId: null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  } satisfies MarketListing
 }
 
-export async function cancelMarketListing(listingId: string) {
+export async function cancelMarketListing(wallet: string, listingId: string) {
   const payload: ListingIdRequest = { listingId }
-  const transaction = await apiRequest<TransactionRequestDto>('/tx/materials/cancel-listing', {
+  const response = await apiRequest<MaterialListingResponse>(`/market/materials/${payload.listingId}/cancel`, {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      sellerWallet: wallet,
+    }),
   })
 
-  await sendWalletTransaction(transaction)
-
-  return {
-    id: payload.listingId,
-    sellerId: '',
-    sellerWallet: null,
-    materialId: '',
-    amount: 0,
-    price: 0,
-    status: 'cancelled',
-    buyerId: null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  } satisfies MarketListing
+  return response.listing
 }
 
-export async function buyMarketListing(listingId: string) {
+export async function buyMarketListing(wallet: string, listingId: string) {
   const payload: ListingIdRequest = { listingId }
-  const transaction = await apiRequest<TransactionRequestDto>('/tx/materials/buy', {
+  const response = await apiRequest<MaterialListingResponse>(`/market/materials/${payload.listingId}/buy`, {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      buyerWallet: wallet,
+    }),
   })
 
-  await sendWalletTransaction(transaction)
-
-  return {
-    id: payload.listingId,
-    sellerId: '',
-    sellerWallet: null,
-    materialId: '',
-    amount: 0,
-    price: 0,
-    status: 'sold',
-    buyerId: null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  } satisfies MarketListing
+  return response.listing
 }
 
-export function getTransactions() {
-  return Promise.resolve([] satisfies PlayerTransaction[])
+export async function getTransactions(wallet: string) {
+  const response = await apiRequest<TransactionsResponse>(`/wallets/${wallet}/transactions`)
+
+  return response.transactions
 }
 
 function getConfiguredMaterialIds() {

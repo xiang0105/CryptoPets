@@ -1,10 +1,13 @@
 import cors from 'cors'
 import express, { type NextFunction, type Request, type Response } from 'express'
 import helmet from 'helmet'
+import { randomUUID } from 'node:crypto'
 import type { AppConfig } from './config.js'
-import { asyncRoute, errorHandler, HttpError, invalidRequest, notFound } from './errors.js'
+import { asyncRoute, conflict, errorHandler, HttpError, invalidRequest, notFound } from './errors.js'
 import type { ChainServices, SentTransactionDto, TransactionRequestDto } from './chain.js'
 import type { ExpeditionDetails, ExpeditionLogEntry } from './expeditionTypes.js'
+import { isKnownMaterialId, materialDefinitions } from '@cryptopets/game-content'
+import type { MarketListing, PlayerTransaction } from '@cryptopets/shared'
 import {
   readAddress,
   readBody,
@@ -47,11 +50,29 @@ export interface StarterPetApiServices {
   getWalletPets(wallet: string): Promise<unknown>
 }
 
+export interface DbMarketApiServices {
+  createMarketListing(input: {
+    id: string
+    sellerWallet: string
+    materialId: string
+    amount: number
+    price: number
+    now: string
+  }): MarketListing
+  getMarketListing(listingId: string): MarketListing | null
+  getReservedMaterialAmounts(wallet: string): Record<string, number>
+  listMarketListings(): MarketListing[]
+  cancelMarketListing(input: { listingId: string; sellerWallet: string; now: string }): MarketListing | null
+  markMarketListingPending(input: { listingId: string; buyerWallet: string; now: string }): MarketListing | null
+  listPlayerTransactions(wallet: string): PlayerTransaction[]
+}
+
 export function createApp(
   config: AppConfig,
   services: BackendServices,
   expeditionServices?: ExpeditionApiServices,
-  starterPetServices?: StarterPetApiServices
+  starterPetServices?: StarterPetApiServices,
+  dbMarketServices?: DbMarketApiServices
 ) {
   const app = express()
 
@@ -127,18 +148,36 @@ export function createApp(
   app.get('/wallets/:wallet/materials', asyncRoute(async (request, response) => {
     const wallet = readAddress(request.params.wallet, 'wallet')
     const materialIds = readUintListFromQuery(request.query.ids, 'ids')
+    const balances = await services.getWalletMaterialBalances(wallet, materialIds) as Array<{ materialId: string; amount: string }>
 
     response.json({
       wallet,
-      balances: await services.getWalletMaterialBalances(wallet, materialIds)
+      balances: dbMarketServices ? subtractReservedMaterialBalances(balances, dbMarketServices.getReservedMaterialAmounts(wallet)) : balances
     })
   }))
 
   app.get('/market/materials', asyncRoute(async (_request, response) => {
+    if (dbMarketServices) {
+      response.json({ listings: dbMarketServices.listMarketListings() })
+      return
+    }
+
     response.json({ listings: await services.getMaterialMarketListings() })
   }))
 
   app.get('/market/materials/:listingId', asyncRoute(async (request, response) => {
+    if (dbMarketServices) {
+      const listingId = readString(request.params as Record<string, unknown>, 'listingId')
+      const listing = dbMarketServices.getMarketListing(listingId)
+
+      if (!listing) {
+        throw notFound('MATERIAL_LISTING_NOT_FOUND', 'Material listing was not found')
+      }
+
+      response.json({ listing })
+      return
+    }
+
     const listingId = readUintParam(request.params.listingId, 'listingId', { positive: true })
     const listing = await services.getMaterialListing(listingId)
 
@@ -148,6 +187,85 @@ export function createApp(
 
     response.json({ listing })
   }))
+
+  app.post('/market/materials', asyncRoute(async (request, response) => {
+    const market = requireDbMarketService(dbMarketServices)
+    const body = readBody(request.body)
+    const sellerWallet = readAddress(body.sellerWallet, 'sellerWallet')
+    const materialId = readKnownMaterialId(body.materialId)
+    const amount = Number(readUintFromBody(body, 'amount', { positive: true }))
+    const price = readPrice(body.price)
+    const availableAmount = await getAvailableMaterialAmount(services, market, sellerWallet, materialId)
+    const now = new Date().toISOString()
+
+    if (amount > availableAmount) {
+      throw invalidRequest('amount exceeds available material balance')
+    }
+
+    response.json({
+      listing: market.createMarketListing({
+        id: randomUUID(),
+        sellerWallet,
+        materialId,
+        amount,
+        price,
+        now
+      })
+    })
+  }))
+
+  app.post('/market/materials/:listingId/cancel', (request, response) => {
+    const market = requireDbMarketService(dbMarketServices)
+    const listingId = readString(request.params as Record<string, unknown>, 'listingId')
+    const body = readBody(request.body)
+    const sellerWallet = readAddress(body.sellerWallet, 'sellerWallet')
+    const listing = market.cancelMarketListing({
+      listingId,
+      sellerWallet,
+      now: new Date().toISOString()
+    })
+
+    if (!listing) {
+      throw notFound('MATERIAL_LISTING_NOT_FOUND', 'Active material listing was not found for this seller')
+    }
+
+    response.json({ listing })
+  })
+
+  app.post('/market/materials/:listingId/buy', (request, response) => {
+    const market = requireDbMarketService(dbMarketServices)
+    const listingId = readString(request.params as Record<string, unknown>, 'listingId')
+    const body = readBody(request.body)
+    const buyerWallet = readAddress(body.buyerWallet, 'buyerWallet')
+    const existing = market.getMarketListing(listingId)
+
+    if (!existing || existing.status !== 'active') {
+      throw notFound('MATERIAL_LISTING_NOT_FOUND', 'Active material listing was not found for this buyer')
+    }
+
+    if (existing.sellerWallet?.toLowerCase() === buyerWallet.toLowerCase()) {
+      throw conflict('CANNOT_BUY_OWN_LISTING', 'You cannot buy your own market listing')
+    }
+
+    const listing = market.markMarketListingPending({
+      listingId,
+      buyerWallet,
+      now: new Date().toISOString()
+    })
+
+    if (!listing) {
+      throw notFound('MATERIAL_LISTING_NOT_FOUND', 'Active material listing was not found for this buyer')
+    }
+
+    response.json({ listing })
+  })
+
+  app.get('/wallets/:wallet/transactions', (request, response) => {
+    const market = requireDbMarketService(dbMarketServices)
+    const wallet = readAddress(request.params.wallet, 'wallet')
+
+    response.json({ wallet, transactions: market.listPlayerTransactions(wallet) })
+  })
 
   app.post('/tx/pets/approve', (request, response) => {
     const body = readBody(request.body)
@@ -349,6 +467,81 @@ function requireExpeditionService(expeditionServices: ExpeditionApiServices | un
   }
 
   return expeditionServices
+}
+
+function requireDbMarketService(dbMarketServices: DbMarketApiServices | undefined) {
+  if (!dbMarketServices) {
+    throw new HttpError(503, 'DB_MARKET_SERVICE_NOT_CONFIGURED', 'Database market service is not configured')
+  }
+
+  return dbMarketServices
+}
+
+function readKnownMaterialId(value: unknown) {
+  if (typeof value !== 'string') {
+    throw invalidRequest('materialId must be a known material id')
+  }
+
+  if (isKnownMaterialId(value)) {
+    return value
+  }
+
+  const material = materialDefinitions.find((definition) => contentMaterialIdToChainId(definition.id) === value)
+
+  if (!material) {
+    throw invalidRequest('materialId must be a known material id')
+  }
+
+  return material.id
+}
+
+function readPrice(value: unknown) {
+  const price = typeof value === 'number' ? value : Number(value)
+
+  if (!Number.isFinite(price) || price <= 0) {
+    throw invalidRequest('price must be greater than zero')
+  }
+
+  return price
+}
+
+function subtractReservedMaterialBalances(
+  balances: Array<{ materialId: string; amount: string }>,
+  reservedByMaterialId: Record<string, number>
+) {
+  return balances.map((balance) => {
+    const materialId = chainMaterialIdToContentId(balance.materialId)
+    const reservedAmount = reservedByMaterialId[materialId] ?? 0
+    const availableAmount = Math.max(0, Number(balance.amount) - reservedAmount)
+
+    return {
+      ...balance,
+      amount: String(availableAmount)
+    }
+  })
+}
+
+async function getAvailableMaterialAmount(
+  services: BackendServices,
+  market: DbMarketApiServices,
+  wallet: string,
+  materialId: string
+) {
+  const balance = await services.getMaterialBalance(wallet, BigInt(contentMaterialIdToChainId(materialId))) as { amount: string }
+  const reservedAmount = market.getReservedMaterialAmounts(wallet)[materialId] ?? 0
+
+  return Math.max(0, Number(balance.amount) - reservedAmount)
+}
+
+function chainMaterialIdToContentId(materialId: string) {
+  const material = materialDefinitions.find((definition) => contentMaterialIdToChainId(definition.id) === materialId)
+
+  return material?.id ?? materialId
+}
+
+function contentMaterialIdToChainId(materialId: string) {
+  const match = /^MAT-(\d+)/.exec(materialId)
+  return match?.[1] ?? materialId
 }
 
 function requireAdmin(config: AppConfig) {

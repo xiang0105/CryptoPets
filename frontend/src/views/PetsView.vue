@@ -336,14 +336,10 @@ onMounted(() => {
                 <dt>{{ text.token }}</dt>
                 <dd>{{ selectedPet.tokenId }}</dd>
               </div>
-              <div>
+              <!-- <div>
                 <dt>IV</dt>
                 <dd>{{ selectedPet.stats.iv }}</dd>
-              </div>
-              <div>
-                <dt>petSkin</dt>
-                <dd>{{ selectedPet.skinId }}</dd>
-              </div>
+              </div> -->
               <div>
                 <dt>{{ text.element }}</dt>
                 <dd>{{ displayElement(selectedPet.element) }}</dd>
@@ -678,10 +674,15 @@ button:disabled {
   border-radius: 7px;
 }
 
-.detail-portrait img,
-.intro-animation img {
+.detail-portrait img {
   width: 92%;
   height: 92%;
+  object-fit: contain;
+}
+
+.intro-animation img {
+  width: min(78%, 300px);
+  height: 78%;
   object-fit: contain;
 }
 
@@ -757,6 +758,7 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  justify-content: space-evenly;
 }
 
 .team-skill-card {
@@ -864,8 +866,10 @@ button:disabled {
 }
 
 .intro-animation {
-  flex: 1;
-  min-height: 220px;
+  flex: 0 1 190px;
+  /* min-height: 170px; */
+  /* max-height: 230px;
+  overflow: hidden; */
 }
 
 .upgrade-section {

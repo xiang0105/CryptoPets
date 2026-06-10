@@ -12,6 +12,7 @@ export interface GoodieSft {
   grade: GoodieGrade
   amount: number
   description: string
+  imageUrl?: string
   price: number
   status: ListingStatus
 }

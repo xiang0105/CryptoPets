@@ -14,6 +14,7 @@ import {
   buyMarketListing,
   cancelMarketListing,
   claimSignedReward,
+  discardMaterial,
   getExpeditionLogs,
   getMarketListings,
   getMaterialBackpack,
@@ -30,9 +31,10 @@ import { replacePets } from '@/data/pets'
 import { getAuthToken } from '@/api/client'
 import { translateApiError } from '@/api/errors'
 import { useWallet } from '@/composables/useWallet'
+import { getMaterialImage } from '@/content/gameAssets'
 
 type QueryKey = 'player' | 'resources' | 'backpack' | 'marketListings' | 'transactions' | 'expeditionLogs'
-type OperationKey = 'startExpedition' | 'claimReward' | 'listMarketMaterial' | 'cancelListing' | 'buyListing'
+type OperationKey = 'startExpedition' | 'claimReward' | 'listMarketMaterial' | 'cancelListing' | 'buyListing' | 'discardMaterial'
 type QueryOptions = {
   force?: boolean
 }
@@ -47,6 +49,7 @@ const marketListings = ref<MarketListing[]>([])
 const transactions = ref<PlayerTransaction[]>([])
 const activeExpedition = ref<ExpeditionSummary | null>(null)
 const expeditionLogs = ref<ExpeditionLogEntry[]>([])
+const { walletAddress } = useWallet()
 
 const queryLoading = reactive<Record<QueryKey, boolean>>({
   player: false,
@@ -81,6 +84,7 @@ const operationLoading = reactive<Record<OperationKey, boolean>>({
   listMarketMaterial: false,
   cancelListing: false,
   buyListing: false,
+  discardMaterial: false,
 })
 
 const operationError = reactive<Record<OperationKey, string>>({
@@ -89,6 +93,7 @@ const operationError = reactive<Record<OperationKey, string>>({
   listMarketMaterial: '',
   cancelListing: '',
   buyListing: '',
+  discardMaterial: '',
 })
 
 const activeMarketGoodies = computed(() =>
@@ -98,12 +103,12 @@ const activeMarketGoodies = computed(() =>
 )
 const purchasableMarketGoodies = computed(() =>
   marketListings.value
-    .filter((listing) => listing.status === 'active' && listing.sellerId !== playerProfile.value?.id)
+    .filter((listing) => listing.status === 'active' && !isOwnMarketListing(listing))
     .map((listing) => marketListingToGoodie(listing)),
 )
 const ownedMarketGoodies = computed(() =>
   marketListings.value
-    .filter((listing) => listing.status === 'active' && listing.sellerId === playerProfile.value?.id)
+    .filter((listing) => listing.status === 'active' && isOwnMarketListing(listing))
     .map((listing) => marketListingToGoodie(listing)),
 )
 const materialBackpackGoodies = computed(() =>
@@ -215,6 +220,11 @@ function marketListingToGoodie(listing: MarketListing): GoodieSft {
     grade: definition?.grade ?? 'D',
     amount: listing.amount,
     description: definition?.description ?? listing.materialId,
+    imageUrl: getMaterialImage({
+      id: listing.materialId,
+      element: definition?.element,
+      slug: definition?.slug,
+    }),
     price: listing.price,
     status: listingStatus(listing.status),
   }
@@ -230,9 +240,29 @@ function materialInventoryItemToGoodie(materialId: string, amount: number): Good
     grade: definition?.grade ?? 'D',
     amount,
     description: definition?.description ?? materialId,
+    imageUrl: getMaterialImage({
+      id: materialId,
+      element: definition?.element,
+      slug: definition?.slug,
+    }),
     price: 0,
     status: 'active',
   }
+}
+
+function isOwnMarketListing(listing: MarketListing) {
+  const sellerWallet = normalizeAddress(listing.sellerWallet)
+  const currentWallet = normalizeAddress(walletAddress.value || playerProfile.value?.wallet)
+
+  if (sellerWallet && currentWallet) {
+    return sellerWallet === currentWallet
+  }
+
+  return Boolean(playerProfile.value?.id && listing.sellerId === playerProfile.value.id)
+}
+
+function normalizeAddress(value: string | null | undefined) {
+  return value?.trim().toLowerCase() ?? ''
 }
 
 function shouldUseProtectedApi() {
@@ -349,7 +379,7 @@ async function loadTransactions(options: QueryOptions = {}) {
     return transactions.value
   }
 
-  return runQuery('transactions', getTransactions, (nextTransactions) => {
+  return runQuery('transactions', () => getTransactions(requireWalletAddress()), (nextTransactions) => {
     transactions.value = nextTransactions
   }, 'Transactions load failed', options)
 }
@@ -451,7 +481,7 @@ async function claimActiveExpedition(expeditionId: string) {
 async function requestListMarketMaterial(materialId: string, amount: number, price: number) {
   const listing = await runOperation(
     'listMarketMaterial',
-    () => listMarketMaterial(materialId, amount, price),
+    () => listMarketMaterial(requireWalletAddress(), materialId, amount, price),
     'Listing creation failed',
   )
   await Promise.allSettled([
@@ -464,7 +494,7 @@ async function requestListMarketMaterial(materialId: string, amount: number, pri
 }
 
 async function requestCancelListing(listingId: string) {
-  const listing = await runOperation('cancelListing', () => cancelMarketListing(listingId), 'Listing cancellation failed')
+  const listing = await runOperation('cancelListing', () => cancelMarketListing(requireWalletAddress(), listingId), 'Listing cancellation failed')
   await Promise.allSettled([
     loadMarketListings({ force: true }),
     loadTransactions({ force: true }),
@@ -475,7 +505,7 @@ async function requestCancelListing(listingId: string) {
 }
 
 async function requestBuyListing(listingId: string) {
-  const listing = await runOperation('buyListing', () => buyMarketListing(listingId), 'Listing purchase failed')
+  const listing = await runOperation('buyListing', () => buyMarketListing(requireWalletAddress(), listingId), 'Listing purchase failed')
   await Promise.allSettled([
     loadMarketListings({ force: true }),
     loadTransactions({ force: true }),
@@ -483,6 +513,19 @@ async function requestBuyListing(listingId: string) {
     loadMaterialBackpack({ force: true }),
   ])
   return listing
+}
+
+async function requestDiscardMaterial(materialId: string, amount: number) {
+  await runOperation(
+    'discardMaterial',
+    () => discardMaterial(requireWalletAddress(), materialId, amount),
+    'Material discard failed',
+  )
+  await Promise.allSettled([
+    loadResources({ force: true }),
+    loadMaterialBackpack({ force: true }),
+    loadTransactions({ force: true }),
+  ])
 }
 
 export function useGameApi() {
@@ -513,6 +556,7 @@ export function useGameApi() {
     loadTransactions,
     requestBuyListing,
     requestCancelListing,
+    requestDiscardMaterial,
     requestListMarketMaterial,
     startTeamExpedition,
   }

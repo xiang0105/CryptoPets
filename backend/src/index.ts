@@ -15,7 +15,7 @@ try {
   const authService = new AuthService(config, expeditionStore)
   const expeditionService = new ExpeditionService(expeditionStore, authService, services)
   const starterPetService = new StarterPetService(expeditionStore, services)
-  const app = createApp(config, services, expeditionService, starterPetService)
+  const app = createApp(config, services, expeditionService, starterPetService, expeditionStore)
 
   app.listen(config.port, () => {
     console.log(`CryptoPets backend listening on port ${config.port}`)

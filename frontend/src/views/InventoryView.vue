@@ -3,9 +3,10 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { materialDefinitions } from '@cryptopets/game-content'
 import { useGameApi } from '@/composables/useGameApi'
 import { currentMessages, isZh } from '@/i18n'
+import { getMaterialImage } from '@/content/gameAssets'
 
 const text = computed(() => currentMessages.value.inventory)
-const detailCopy = {
+const detailCopy: Record<string, any> = {
   title: '物品詳情',
   materialInfo: '素材資訊',
   emptyName: '空素材格',
@@ -24,6 +25,28 @@ const detailCopy = {
   selectMaterialFirst: '請先選擇素材。',
   actionReserved: '素材操作需等待後端 API 開放，前端不會本地修改資料。',
 }
+Object.assign(detailCopy, {
+  title: '物品詳情',
+  materialInfo: '素材資訊',
+  emptyName: '空素材格',
+  emptyDescription: '目前沒有可用素材。完成遠征或重新同步後，素材會顯示在這裡。',
+  stackLimit: '堆疊上限',
+  tradeHint: '交易',
+  origin: '來源',
+  syncedAt: '同步時間',
+  chainReserved: '鏈上素材資料',
+  noMaterialValue: '素材沒有固定價值，市場價格由上架者自行決定。',
+  notSynced: '尚未同步',
+  discard: '丟棄',
+  use: '使用',
+  sellAll: '出售',
+  quantity: '數量',
+  selectMaterialFirst: '請先選擇素材。',
+  useUnavailable: '使用功能暫時尚未開放。',
+  discardSuccess: '已送出鏈上丟棄交易。',
+  sellSuccess: '已放入市場 DB，請到商店頁查看掛單。',
+  defaultSellPrice: 0.00000000001,
+})
 const shelfPageSize = 20
 const selectedSlot = ref(0)
 const shelfPage = ref(0)
@@ -31,7 +54,19 @@ const shelfDirection = ref<'prev' | 'next'>('next')
 const shelfSwitching = ref(false)
 const detailNotice = ref('')
 const actionAmount = ref(1)
-const { materialBackpack: backpack, queryError, queryLoading, resources, loadMaterialBackpack, loadResources } = useGameApi()
+const {
+  materialBackpack: backpack,
+  operationError,
+  operationLoading,
+  queryError,
+  queryLoading,
+  resources,
+  loadMarketListings,
+  loadMaterialBackpack,
+  loadResources,
+  requestDiscardMaterial,
+  requestListMarketMaterial,
+} = useGameApi()
 const materialDefinitionById = new Map(materialDefinitions.map((material) => [material.id, material]))
 const isLoadingBackpack = computed(() => queryLoading.backpack)
 const backpackError = computed(() => queryError.backpack)
@@ -51,6 +86,11 @@ const materialSlots = computed(() => {
         element: definition?.element ?? 1,
         grade: definition?.grade ?? 'D',
         description: definition?.description ?? item.materialId,
+        imageUrl: getMaterialImage({
+          id: item.materialId,
+          element: definition?.element,
+          slug: definition?.slug,
+        }),
         price: 0,
       }
     })
@@ -67,10 +107,10 @@ const shelfSlots = computed(() => {
 })
 const selectedMaterial = computed(() => materialSlots.value[selectedSlot.value] ?? null)
 const hasMaterials = computed(() => materialSlots.value.some((slot) => slot !== null))
-const materialActionsEnabled = computed(() => false)
-const canUseSelectedMaterial = computed(() => Boolean(selectedMaterial.value) && materialActionsEnabled.value)
+const materialActionsEnabled = computed(() => true)
+const canUseSelectedMaterial = computed(() => Boolean(selectedMaterial.value))
 const maxActionAmount = computed(() => Math.max(1, selectedMaterial.value?.amount ?? 1))
-const reservedActionNotice = computed(() => (selectedMaterial.value ? detailCopy.actionReserved : ''))
+const reservedActionNotice = computed(() => '')
 const backpackSource = computed(() => {
   if (!backpack.value) {
     return detailCopy.chainReserved
@@ -153,6 +193,35 @@ function handleDetailAction(action: string) {
   detailNotice.value = `${action} x${amount}：${detailCopy.actionReserved}`
 }
 
+async function handleInventoryAction(action: 'discard' | 'use' | 'sell') {
+  if (!selectedMaterial.value) {
+    detailNotice.value = detailCopy.selectMaterialFirst
+    return
+  }
+
+  const amount = Math.min(maxActionAmount.value, Math.max(1, Math.round(actionAmount.value)))
+  actionAmount.value = amount
+
+  if (action === 'use') {
+    detailNotice.value = detailCopy.useUnavailable
+    return
+  }
+
+  try {
+    if (action === 'discard') {
+      await requestDiscardMaterial(selectedMaterial.value.materialId, amount)
+      detailNotice.value = detailCopy.discardSuccess
+      return
+    }
+
+    await requestListMarketMaterial(selectedMaterial.value.materialId, amount, detailCopy.defaultSellPrice)
+    await loadMarketListings({ force: true }).catch(() => undefined)
+    detailNotice.value = detailCopy.sellSuccess
+  } catch {
+    detailNotice.value = action === 'discard' ? operationError.discardMaterial : operationError.listMarketMaterial
+  }
+}
+
 watch(selectedMaterial, () => {
   actionAmount.value = 1
   detailNotice.value = ''
@@ -212,7 +281,7 @@ onBeforeUnmount(() => {
         >
           <template v-if="material">
             <span class="grade-corner" :class="`grade-${material.grade.toLowerCase()}`">{{ material.grade }}</span>
-            <span class="material-icon" :class="`material-${material.element}`" aria-hidden="true"></span>
+            <img class="material-image" :src="material.imageUrl" :alt="materialName(material)" draggable="false" />
             <strong>{{ materialName(material) }}</strong>
             <small>x{{ material.amount }}</small>
           </template>
@@ -240,7 +309,7 @@ onBeforeUnmount(() => {
         <section class="detail-body">
           <h3>{{ detailCopy.materialInfo }}</h3>
           <div class="detail-empty-slot" :class="{ filled: selectedMaterial }" aria-hidden="true">
-            <span v-if="selectedMaterial" class="material-icon large" :class="`material-${selectedMaterial.element}`"></span>
+            <img v-if="selectedMaterial" class="material-image large" :src="selectedMaterial.imageUrl" :alt="materialName(selectedMaterial)" draggable="false" />
             <span v-else></span>
           </div>
           <strong>{{ selectedMaterial ? materialName(selectedMaterial) : detailCopy.emptyName }}</strong>
@@ -283,13 +352,21 @@ onBeforeUnmount(() => {
         </p>
 
         <footer>
-          <button type="button" :disabled="!canUseSelectedMaterial" @click="handleDetailAction(detailCopy.discard)">
+          <button
+            type="button"
+            :disabled="!canUseSelectedMaterial || operationLoading.discardMaterial"
+            @click="handleInventoryAction('discard')"
+          >
             {{ detailCopy.discard }}
           </button>
-          <button type="button" :disabled="!canUseSelectedMaterial" @click="handleDetailAction(detailCopy.use)">
+          <button type="button" :disabled="!canUseSelectedMaterial" @click="handleInventoryAction('use')">
             {{ detailCopy.use }}
           </button>
-          <button type="button" :disabled="!canUseSelectedMaterial" @click="handleDetailAction(detailCopy.sellAll)">
+          <button
+            type="button"
+            :disabled="!canUseSelectedMaterial || operationLoading.listMarketMaterial"
+            @click="handleInventoryAction('sell')"
+          >
             {{ detailCopy.sellAll }}
           </button>
         </footer>
@@ -547,7 +624,7 @@ onBeforeUnmount(() => {
 
 .inventory-detail {
   display: grid;
-  grid-template-rows: .1fr auto .1fr;
+  grid-template-rows: .1fr 10fr .1fr;
   min-height: 0;
   overflow: hidden;
   color: #4d241d;
@@ -699,18 +776,21 @@ onBeforeUnmount(() => {
   background: #7b5b3a;
 }
 
-.material-icon {
+.material-icon,
+.material-image {
   display: block;
   justify-self: center;
   width: min(54px, 58%);
   aspect-ratio: 1;
+  object-fit: contain;
   background: #e7a23f;
   border: 3px solid rgba(255, 247, 223, 0.78);
   border-radius: 8px;
   box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.24);
 }
 
-.material-icon.large {
+.material-icon.large,
+.material-image.large {
   width: 66px;
   height: 66px;
 }

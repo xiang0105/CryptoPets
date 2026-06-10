@@ -1,7 +1,7 @@
 ﻿<script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { ExpeditionLogEntry as ApiExpeditionLogEntry, ExpeditionSummary } from '@cryptopets/shared'
-import { pets, type Pet } from '@/data/pets'
+import type { Pet } from '@/data/pets'
 import { useGameApi } from '@/composables/useGameApi'
 import { expeditionTeamPets } from '@/state/expeditionTeam'
 import { getPetImage, yuzuBiteFrames } from '@/content/gameAssets'
@@ -55,6 +55,7 @@ const logLinesElement = ref<HTMLElement | null>(null)
 const now = ref(Date.now())
 const activeExpedition = ref<ExpeditionRecord | null>(loadStoredExpedition())
 const lastSelectedForest = ref<ForestOption | null>(null)
+const localExpeditionError = ref('')
 let fruitTimer: number | undefined
 let clockTimer: number | undefined
 let logRefreshTimer: number | undefined
@@ -64,7 +65,7 @@ const fruitCycleDuration = 12800
 const fruitImage = computed(() => fruitFrames[fruitFrameIndex.value])
 const selectedForest = computed(() => forestOptions.find((forest) => forest.id === activeExpedition.value?.id) ?? null)
 const teamPower = computed(() => {
-  const team = expeditionTeamPets.value.length > 0 ? expeditionTeamPets.value : pets
+  const team = expeditionTeamPets.value
   const total = team.reduce((sum, pet) => sum + pet.stats.hp + pet.stats.atk * 1.4 + pet.stats.def * 1.2 + pet.stage * 12, 0)
 
   return Math.round(total / Math.max(1, team.length))
@@ -179,7 +180,7 @@ function petLevel(pet: Pet) {
 }
 
 function currentExpeditionTeam() {
-  return expeditionTeamPets.value.length > 0 ? expeditionTeamPets.value : pets
+  return expeditionTeamPets.value
 }
 
 function expeditionRecordFromSummary(summary: ExpeditionSummary): ExpeditionRecord | null {
@@ -204,7 +205,7 @@ function expeditionRecordFromSummary(summary: ExpeditionSummary): ExpeditionReco
   }
 }
 
-const expeditionStatusError = computed(() => queryError.player || operationError.startExpedition || operationError.claimReward)
+const expeditionStatusError = computed(() => localExpeditionError.value || queryError.player || operationError.startExpedition || operationError.claimReward)
 const isExpeditionStatusLoading = computed(() => queryLoading.player || operationLoading.startExpedition || operationLoading.claimReward)
 
 async function startExpedition(forest: ForestOption) {
@@ -213,7 +214,15 @@ async function startExpedition(forest: ForestOption) {
   }
 
   lastSelectedForest.value = forest
-  const teamPetIds = currentExpeditionTeam().map((pet) => pet.tokenId)
+  const selectedTeam = currentExpeditionTeam()
+
+  if (selectedTeam.length === 0) {
+    localExpeditionError.value = isZh.value ? '請先到角色頁選擇遠征隊伍' : 'Choose an expedition team on the Pet page first.'
+    return
+  }
+
+  localExpeditionError.value = ''
+  const teamPetIds = selectedTeam.map((pet) => pet.tokenId)
   let apiSummary
 
   try {
@@ -457,8 +466,11 @@ onUnmounted(() => {
       <h2><span></span> {{ text.partyTitle }} <span></span></h2>
 
       <div class="pet-list">
+        <p v-if="expeditionTeamPets.length === 0" class="party-empty">
+          {{ isZh ? '請先到角色頁選擇遠征隊伍' : 'Choose an expedition team on the Pet page first.' }}
+        </p>
         <article
-          v-for="pet in pets"
+          v-for="pet in expeditionTeamPets"
           :key="pet.id"
           class="pet-card"
           :class="elementMeta[pet.element].className"
@@ -507,10 +519,6 @@ onUnmounted(() => {
             <div>
               <dt>ID</dt>
               <dd>{{ pet.tokenId }}</dd>
-            </div>
-            <div>
-              <dt>Skin</dt>
-              <dd>{{ pet.skinId }}</dd>
             </div>
           </dl>
         </article>
@@ -1274,6 +1282,18 @@ onUnmounted(() => {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   min-height: 0;
+}
+
+.party-empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 18px;
+  color: #6f4228;
+  font-weight: 900;
+  text-align: center;
+  background: rgba(255, 247, 223, 0.58);
+  border: 2px dashed #b7834e;
+  border-radius: 8px;
 }
 
 .pet-card {

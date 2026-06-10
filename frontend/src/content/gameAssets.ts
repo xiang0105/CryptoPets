@@ -7,6 +7,15 @@ import yuzuBiteOne from '@game-content/assets/goodies/yuzu-bite-1.png'
 import yuzuBiteTwo from '@game-content/assets/goodies/yuzu-bite-2.png'
 import yuzuBiteThree from '@game-content/assets/goodies/yuzu-bite-3.png'
 import yuzuBiteFour from '@game-content/assets/goodies/yuzu-bite-4.png'
+import bathSaltIcon from '@game-content/assets/goodies/bath-salt.svg'
+import foldingFanIcon from '@game-content/assets/goodies/folding-fan.svg'
+import helmetIcon from '@game-content/assets/goodies/helmet.svg'
+import iceCrystalIcon from '@game-content/assets/goodies/ice-crystal.svg'
+import persimmonJamIcon from '@game-content/assets/goodies/persimmon-jam.svg'
+import sakuraIcon from '@game-content/assets/goodies/sakura.svg'
+import scrollIcon from '@game-content/assets/goodies/scroll.svg'
+import vanillaIcon from '@game-content/assets/goodies/vanilla.svg'
+import yuzuFruitIcon from '@game-content/assets/goodies/yuzu-fruit.svg'
 
 export const capybaraImageBySlug: Record<string, string> = {
   'capy-san': capySanImage,
@@ -34,6 +43,42 @@ export function getPetImage(pet: { id: string; name: string; basePetId?: string 
 }
 
 export const yuzuBiteFrames = [yuzuBiteOne, yuzuBiteTwo, yuzuBiteThree, yuzuBiteFour]
+
+const materialImageById: Record<string, string> = {
+  'MAT-2C': yuzuBiteOne,
+  'MAT-4B': iceCrystalIcon,
+}
+
+const materialImageBySlug: Record<string, string> = {
+  'bath-salt': bathSaltIcon,
+  'folding-fan': foldingFanIcon,
+  helmet: helmetIcon,
+  'ice-crystal': iceCrystalIcon,
+  'persimmon-jam': persimmonJamIcon,
+  sakura: sakuraIcon,
+  scroll: scrollIcon,
+  vanilla: vanillaIcon,
+  'yuzu-bite': yuzuBiteOne,
+  'yuzu-fruit': yuzuFruitIcon,
+}
+
+const materialFallbackByElement: Record<number, string> = {
+  1: yuzuFruitIcon,
+  2: yuzuBiteOne,
+  3: iceCrystalIcon,
+  4: sakuraIcon,
+}
+
+export function getMaterialImage(material: { id?: string; materialId?: string; element?: number; slug?: string }) {
+  const materialId = material.id ?? material.materialId
+
+  return (
+    (materialId ? materialImageById[materialId] : undefined) ??
+    (material.slug ? materialImageBySlug[material.slug] : undefined) ??
+    (material.element ? materialFallbackByElement[material.element] : undefined) ??
+    yuzuFruitIcon
+  )
+}
 
 export const marketCapybaraSprites = [
   { id: 'capy-san-a', src: capySanImage, name: 'Capy-San', motion: 'walk-right' },

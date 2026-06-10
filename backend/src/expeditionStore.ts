@@ -12,6 +12,7 @@ import type {
   ExpeditionStatus,
   ExpeditionType
 } from './expeditionTypes.js'
+import type { MarketListing, PlayerTransaction, WalletAddress } from '@cryptopets/shared'
 
 export interface NonceRecord {
   nonce: string
@@ -77,6 +78,29 @@ interface StarterPetGrantRow {
   granted_at: string
 }
 
+interface MarketListingRow {
+  id: string
+  seller_id: string
+  seller_wallet: string
+  material_id: string
+  amount: number
+  price: number
+  status: MarketListing['status']
+  buyer_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+interface PlayerTransactionRow {
+  id: string
+  wallet: string
+  action: PlayerTransaction['action']
+  material_id: string | null
+  material_amount: number | null
+  sepolia_amount: string
+  created_at: string
+}
+
 export class ExpeditionStore {
   private db: Database.Database
 
@@ -131,6 +155,176 @@ export class ExpeditionStore {
       txHashes: JSON.stringify(record.txHashes),
       grantedAt: record.grantedAt
     })
+  }
+
+  createMarketListing(input: {
+    id: string
+    sellerWallet: string
+    materialId: string
+    amount: number
+    price: number
+    now: string
+  }): MarketListing {
+    const listing: MarketListing = {
+      id: input.id,
+      sellerId: input.sellerWallet,
+      sellerWallet: input.sellerWallet as WalletAddress,
+      materialId: input.materialId,
+      amount: input.amount,
+      price: input.price,
+      status: 'active',
+      buyerId: null,
+      createdAt: input.now,
+      updatedAt: input.now
+    }
+
+    const transaction: PlayerTransaction = {
+      id: `${input.id}-list`,
+      action: 'list',
+      materialId: input.materialId,
+      materialAmount: input.amount,
+      sepoliaAmount: '0',
+      createdAt: input.now
+    }
+
+    const insertListing = this.db.prepare(`
+      insert into market_material_listings (
+        id, seller_id, seller_wallet, material_id, amount, price, status, buyer_id, created_at, updated_at
+      )
+      values (@id, @sellerId, @sellerWallet, @materialId, @amount, @price, @status, @buyerId, @createdAt, @updatedAt)
+    `)
+    const insertTransaction = this.db.prepare(`
+      insert into player_transactions (id, wallet, action, material_id, material_amount, sepolia_amount, created_at)
+      values (@id, @wallet, @action, @materialId, @materialAmount, @sepoliaAmount, @createdAt)
+    `)
+
+    const transactionRunner = this.db.transaction(() => {
+      insertListing.run(listing)
+      insertTransaction.run({
+        ...transaction,
+        wallet: input.sellerWallet
+      })
+    })
+
+    transactionRunner()
+    return listing
+  }
+
+  getMarketListing(listingId: string): MarketListing | null {
+    const row = this.db.prepare('select * from market_material_listings where id = ?').get(listingId) as MarketListingRow | undefined
+    return row ? mapMarketListing(row) : null
+  }
+
+  listMarketListings(): MarketListing[] {
+    const rows = this.db
+      .prepare("select * from market_material_listings where status in ('active', 'pending') order by created_at desc, id desc")
+      .all() as MarketListingRow[]
+
+    return rows.map(mapMarketListing)
+  }
+
+  getReservedMaterialAmounts(wallet: string): Record<string, number> {
+    const rows = this.db
+      .prepare(`
+        select material_id, sum(amount) as amount
+        from market_material_listings
+        where seller_wallet = ? and status in ('active', 'pending')
+        group by material_id
+      `)
+      .all(wallet) as Array<{ material_id: string; amount: number | null }>
+
+    return Object.fromEntries(rows.map((row) => [row.material_id, row.amount ?? 0]))
+  }
+
+  cancelMarketListing(input: { listingId: string; sellerWallet: string; now: string }): MarketListing | null {
+    const existing = this.getMarketListing(input.listingId)
+
+    if (!existing || existing.status !== 'active' || existing.sellerWallet?.toLowerCase() !== input.sellerWallet.toLowerCase()) {
+      return null
+    }
+
+    const transaction: PlayerTransaction = {
+      id: `${input.listingId}-cancel-${Date.now()}`,
+      action: 'cancel',
+      materialId: existing.materialId,
+      materialAmount: existing.amount,
+      sepoliaAmount: '0',
+      createdAt: input.now
+    }
+
+    const transactionRunner = this.db.transaction(() => {
+      this.db.prepare(`
+        update market_material_listings
+        set status = 'cancelled', updated_at = ?
+        where id = ? and status = 'active'
+      `).run(input.now, input.listingId)
+      this.db.prepare(`
+        insert into player_transactions (id, wallet, action, material_id, material_amount, sepolia_amount, created_at)
+        values (@id, @wallet, @action, @materialId, @materialAmount, @sepoliaAmount, @createdAt)
+      `).run({
+        ...transaction,
+        wallet: input.sellerWallet
+      })
+    })
+
+    transactionRunner()
+    return this.getMarketListing(input.listingId)
+  }
+
+  markMarketListingPending(input: { listingId: string; buyerWallet: string; now: string }): MarketListing | null {
+    const existing = this.getMarketListing(input.listingId)
+
+    if (!existing || existing.status !== 'active' || existing.sellerWallet?.toLowerCase() === input.buyerWallet.toLowerCase()) {
+      return null
+    }
+
+    const buyTransaction: PlayerTransaction = {
+      id: `${input.listingId}-buy-${Date.now()}`,
+      action: 'buy',
+      materialId: existing.materialId,
+      materialAmount: existing.amount,
+      sepoliaAmount: '0',
+      createdAt: input.now
+    }
+    const sellTransaction: PlayerTransaction = {
+      id: `${input.listingId}-sell-${Date.now()}`,
+      action: 'sell',
+      materialId: existing.materialId,
+      materialAmount: existing.amount,
+      sepoliaAmount: '0',
+      createdAt: input.now
+    }
+
+    const insertTransaction = this.db.prepare(`
+      insert into player_transactions (id, wallet, action, material_id, material_amount, sepolia_amount, created_at)
+      values (@id, @wallet, @action, @materialId, @materialAmount, @sepoliaAmount, @createdAt)
+    `)
+    const transactionRunner = this.db.transaction(() => {
+      this.db.prepare(`
+        update market_material_listings
+        set status = 'pending', buyer_id = ?, updated_at = ?
+        where id = ? and status = 'active'
+      `).run(input.buyerWallet, input.now, input.listingId)
+      insertTransaction.run({
+        ...buyTransaction,
+        wallet: input.buyerWallet
+      })
+      insertTransaction.run({
+        ...sellTransaction,
+        wallet: existing.sellerWallet
+      })
+    })
+
+    transactionRunner()
+    return this.getMarketListing(input.listingId)
+  }
+
+  listPlayerTransactions(wallet: string): PlayerTransaction[] {
+    const rows = this.db
+      .prepare('select * from player_transactions where wallet = ? order by created_at desc, id desc limit 100')
+      .all(wallet) as PlayerTransactionRow[]
+
+    return rows.map(mapPlayerTransaction)
   }
 
   getActiveExpedition(wallet: string): ExpeditionDetails | null {
@@ -314,10 +508,40 @@ export class ExpeditionStore {
         granted_at text not null
       );
 
+      create table if not exists market_material_listings (
+        id text primary key,
+        seller_id text not null,
+        seller_wallet text not null,
+        material_id text not null,
+        amount integer not null,
+        price real not null,
+        status text not null,
+        buyer_id text,
+        created_at text not null,
+        updated_at text not null
+      );
+
+      create table if not exists player_transactions (
+        id text primary key,
+        wallet text not null,
+        action text not null,
+        material_id text,
+        material_amount integer,
+        sepolia_amount text not null,
+        created_at text not null
+      );
+
       create index if not exists auth_nonces_wallet_idx on auth_nonces(wallet);
       create index if not exists expeditions_wallet_status_idx on expeditions(wallet, status);
       create index if not exists expedition_logs_wallet_time_idx on expedition_logs(wallet, occurred_at);
       create index if not exists expedition_logs_expedition_time_idx on expedition_logs(expedition_id, occurred_at);
+      create index if not exists market_material_listings_status_idx on market_material_listings(status, created_at);
+      create index if not exists market_material_listings_seller_idx on market_material_listings(seller_wallet, status);
+      create index if not exists player_transactions_wallet_time_idx on player_transactions(wallet, created_at);
+
+      update player_transactions
+      set sepolia_amount = '0'
+      where action in ('list', 'buy', 'sell');
     `)
   }
 }
@@ -355,5 +579,31 @@ function mapStarterPetGrant(row: StarterPetGrantRow): StarterPetGrantRecord {
     ivs: JSON.parse(row.ivs) as number[],
     txHashes: JSON.parse(row.tx_hashes) as string[],
     grantedAt: row.granted_at
+  }
+}
+
+function mapMarketListing(row: MarketListingRow): MarketListing {
+  return {
+    id: row.id,
+    sellerId: row.seller_id,
+    sellerWallet: row.seller_wallet as WalletAddress,
+    materialId: row.material_id,
+    amount: row.amount,
+    price: row.price,
+    status: row.status,
+    buyerId: row.buyer_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+function mapPlayerTransaction(row: PlayerTransactionRow): PlayerTransaction {
+  return {
+    id: row.id,
+    action: row.action,
+    materialId: row.material_id,
+    materialAmount: row.material_amount,
+    sepoliaAmount: row.sepolia_amount,
+    createdAt: row.created_at
   }
 }

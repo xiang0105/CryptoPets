@@ -30,10 +30,10 @@ export const materialDefinitions: MaterialDefinition[] = [
       ],
       iconKey: 'material-2',
     },
-    name: { zh: '柚子碎片', en: 'Yuzu Bite' },
+    name: { zh: '柚子果', en: 'Yuzu Bite' },
     element: 2,
     grade: 'C',
-    description: '帶有柑橘香氣的基礎素材，可用於水豚進階。',
+    description: '帶著清爽香氣的柚子素材，常見於橘子森林。可作為交易、料理或後續強化系統的基礎材料。',
   },
   {
     id: 'MAT-4B',
@@ -42,10 +42,10 @@ export const materialDefinitions: MaterialDefinition[] = [
       imageFrames: [],
       iconKey: 'material-4',
     },
-    name: { zh: '雪蜜桃', en: 'Snow Peach' },
+    name: { zh: '冰霜蜜桃', en: 'Snow Peach' },
     element: 4,
     grade: 'B',
-    description: '寒霧森林中取得的稀有素材，可用於高階培育。',
+    description: '在寒冷森林中凝結甜香的稀有果實。暫以冰晶素材圖示代表，之後可替換成正式蜜桃圖。',
   },
 ]
 

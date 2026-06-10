@@ -115,7 +115,7 @@ export interface MaterialBackpack extends PlayerResources {
   }
 }
 
-export type MarketListingStatus = 'active' | 'sold' | 'cancelled'
+export type MarketListingStatus = 'active' | 'pending' | 'sold' | 'cancelled'
 
 export interface MarketListing {
   id: string

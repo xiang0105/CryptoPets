@@ -161,7 +161,7 @@ describe('StoreView', () => {
     await flushPromises()
 
     expect(requestBuyListing).toHaveBeenCalledWith('listing-1')
-    expect(wrapper.text()).toContain('Bought Yuzu Bite')
+    expect(wrapper.text()).toContain('Purchase pending: Yuzu Bite')
   })
 
   it('lists a backpack material through the backend market API', async () => {

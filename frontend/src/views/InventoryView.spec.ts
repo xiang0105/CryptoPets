@@ -13,6 +13,7 @@ const mockQueryError = reactive({
   backpack: '',
   marketListings: '',
   transactions: '',
+  expeditionLogs: '',
 })
 const mockQueryLoading = reactive({
   player: false,
@@ -20,19 +21,44 @@ const mockQueryLoading = reactive({
   backpack: false,
   marketListings: false,
   transactions: false,
+  expeditionLogs: false,
+})
+const mockOperationError = reactive({
+  startExpedition: '',
+  claimReward: '',
+  listMarketMaterial: '',
+  cancelListing: '',
+  buyListing: '',
+  discardMaterial: '',
+})
+const mockOperationLoading = reactive({
+  startExpedition: false,
+  claimReward: false,
+  listMarketMaterial: false,
+  cancelListing: false,
+  buyListing: false,
+  discardMaterial: false,
 })
 
+const loadMarketListings = vi.fn()
 const loadMaterialBackpack = vi.fn()
 const loadResources = vi.fn()
+const requestDiscardMaterial = vi.fn()
+const requestListMarketMaterial = vi.fn()
 
 vi.mock('@/composables/useGameApi', () => ({
   useGameApi: () => ({
     materialBackpack: mockBackpack,
+    operationError: mockOperationError,
+    operationLoading: mockOperationLoading,
     queryError: mockQueryError,
     queryLoading: mockQueryLoading,
     resources: mockResources,
+    loadMarketListings,
     loadMaterialBackpack,
     loadResources,
+    requestDiscardMaterial,
+    requestListMarketMaterial,
   }),
 }))
 
@@ -77,8 +103,17 @@ beforeEach(() => {
   Object.keys(mockQueryLoading).forEach((key) => {
     mockQueryLoading[key as keyof typeof mockQueryLoading] = false
   })
+  Object.keys(mockOperationError).forEach((key) => {
+    mockOperationError[key as keyof typeof mockOperationError] = ''
+  })
+  Object.keys(mockOperationLoading).forEach((key) => {
+    mockOperationLoading[key as keyof typeof mockOperationLoading] = false
+  })
+  loadMarketListings.mockReset().mockResolvedValue(undefined)
   loadMaterialBackpack.mockReset().mockResolvedValue(undefined)
   loadResources.mockReset().mockResolvedValue(undefined)
+  requestDiscardMaterial.mockReset().mockResolvedValue(undefined)
+  requestListMarketMaterial.mockReset().mockResolvedValue(undefined)
 })
 
 describe('InventoryView', () => {
@@ -134,16 +169,22 @@ describe('InventoryView', () => {
     expect(wrapper.text()).toContain('local-db')
   })
 
-  it('keeps material actions disabled until backend APIs exist', () => {
+  it('uses, discards, and lists selected materials from the backpack', async () => {
     const wrapper = mountInventory()
     const quantityInput = wrapper.get('input[type="number"]')
     const actionButtons = wrapper.findAll('footer button')
 
-    expect(quantityInput.attributes('disabled')).toBeDefined()
+    expect(quantityInput.attributes('disabled')).toBeUndefined()
     expect(actionButtons).toHaveLength(3)
-    actionButtons.forEach((button) => {
-      expect(button.attributes('disabled')).toBeDefined()
-    })
-    expect(wrapper.text()).toContain('素材操作需等待後端 API 開放')
+
+    await actionButtons[1]!.trigger('click')
+    expect(wrapper.text()).toContain('使用功能暫時尚未開放')
+
+    await actionButtons[0]!.trigger('click')
+    expect(requestDiscardMaterial).toHaveBeenCalledWith('MAT-2C', 1)
+
+    await actionButtons[2]!.trigger('click')
+    expect(requestListMarketMaterial).toHaveBeenCalledWith('MAT-2C', 1, 0.00000000001)
+    expect(loadMarketListings).toHaveBeenCalledWith({ force: true })
   })
 })

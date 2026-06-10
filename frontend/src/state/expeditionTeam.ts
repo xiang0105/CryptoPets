@@ -4,7 +4,11 @@ import { pets } from '@/data/pets'
 const maxTeamSlots = 4
 const expeditionTeamIds = ref<string[]>([])
 
-const expeditionTeamPets = computed(() => pets.filter((pet) => expeditionTeamIds.value.includes(pet.id)))
+const expeditionTeamPets = computed(() =>
+  expeditionTeamIds.value
+    .map((petId) => pets.find((pet) => pet.id === petId) ?? null)
+    .filter((pet): pet is (typeof pets)[number] => Boolean(pet)),
+)
 
 function isPetInExpeditionTeam(petId: string) {
   return expeditionTeamIds.value.includes(petId)

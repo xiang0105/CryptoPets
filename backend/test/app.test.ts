@@ -1,10 +1,11 @@
 import { AddressInfo } from 'node:net'
 import { describe, expect, it } from 'vitest'
 import { Interface } from 'ethers'
-import { createApp } from '../src/app.js'
+import { createApp, type BackendServices } from '../src/app.js'
 import { cryptoPetsAbi } from '../src/abi.js'
 import { ChainServices } from '../src/chain.js'
 import type { AppConfig } from '../src/config.js'
+import { ExpeditionStore } from '../src/expeditionStore.js'
 
 const baseConfig: AppConfig = {
   port: 3400,
@@ -89,7 +90,191 @@ describe('backend app', () => {
     expect(response.status).toBe(400)
     expect(response.body.error).toBe('INVALID_REQUEST')
   })
+
+  it('creates database material listings and marks purchases pending without chain transactions', async () => {
+    const store = new ExpeditionStore(':memory:')
+    const sellerWallet = '0x86d892de0CF9256401df49Aa08d51d0bC75A106d'
+    const buyerWallet = '0xD8b6b7d402DDC69788f51eD613c3c3e9dDDCAB7e'
+    const app = createApp(baseConfig, createMaterialBalanceServices({ '2': '10' }), undefined, undefined, store)
+
+    try {
+      const createResponse = await request(app, 'POST', '/market/materials', {
+        sellerWallet,
+        materialId: 'MAT-2C',
+        amount: 2,
+        price: 0.25
+      })
+
+      expect(createResponse.status).toBe(200)
+      expect(createResponse.body.listing.status).toBe('active')
+      expect(createResponse.body.listing.materialId).toBe('MAT-2C')
+      expect(store.getReservedMaterialAmounts(sellerWallet)).toEqual({ 'MAT-2C': 2 })
+
+      const sellerTransactions = await request(app, 'GET', `/wallets/${sellerWallet}/transactions`)
+      expect(sellerTransactions.body.transactions).toEqual([
+        expect.objectContaining({
+          action: 'list',
+          materialId: 'MAT-2C',
+          materialAmount: 2,
+          sepoliaAmount: '0'
+        })
+      ])
+
+      const listingId = createResponse.body.listing.id as string
+      const buyResponse = await request(app, 'POST', `/market/materials/${listingId}/buy`, {
+        buyerWallet
+      })
+
+      expect(buyResponse.status).toBe(200)
+      expect(buyResponse.body.listing.status).toBe('pending')
+      expect(buyResponse.body.listing.buyerId).toBe(buyerWallet)
+      expect(store.getReservedMaterialAmounts(sellerWallet)).toEqual({ 'MAT-2C': 2 })
+
+      const marketResponse = await request(app, 'GET', '/market/materials')
+      expect(marketResponse.body.listings).toEqual([buyResponse.body.listing])
+
+      const buyerTransactions = await request(app, 'GET', `/wallets/${buyerWallet}/transactions`)
+      expect(buyerTransactions.body.transactions).toEqual([
+        expect.objectContaining({
+          action: 'buy',
+          materialId: 'MAT-2C',
+          materialAmount: 2,
+          sepoliaAmount: '0'
+        })
+      ])
+    } finally {
+      store.close()
+    }
+  })
+
+  it('rejects buying your own database material listing with a clear conflict error', async () => {
+    const store = new ExpeditionStore(':memory:')
+    const sellerWallet = '0x86d892de0CF9256401df49Aa08d51d0bC75A106d'
+    const app = createApp(baseConfig, createMaterialBalanceServices({ '2': '10' }), undefined, undefined, store)
+
+    try {
+      const createResponse = await request(app, 'POST', '/market/materials', {
+        sellerWallet,
+        materialId: 'MAT-2C',
+        amount: 1,
+        price: 0.00000000001
+      })
+      const buyResponse = await request(app, 'POST', `/market/materials/${createResponse.body.listing.id}/buy`, {
+        buyerWallet: sellerWallet
+      })
+
+      expect(createResponse.status).toBe(200)
+      expect(buyResponse.status).toBe(409)
+      expect(buyResponse.body.error).toBe('CANNOT_BUY_OWN_LISTING')
+    } finally {
+      store.close()
+    }
+  })
+
+  it('normalizes chain material ids when creating database listings', async () => {
+    const store = new ExpeditionStore(':memory:')
+    const sellerWallet = '0x86d892de0CF9256401df49Aa08d51d0bC75A106d'
+    const app = createApp(baseConfig, createMaterialBalanceServices({ '2': '10' }), undefined, undefined, store)
+
+    try {
+      const response = await request(app, 'POST', '/market/materials', {
+        sellerWallet,
+        materialId: '2',
+        amount: 1,
+        price: 0.00000000001
+      })
+
+      expect(response.status).toBe(200)
+      expect(response.body.listing.materialId).toBe('MAT-2C')
+    } finally {
+      store.close()
+    }
+  })
+
+  it('subtracts database market reservations from wallet material balances', async () => {
+    const store = new ExpeditionStore(':memory:')
+    const sellerWallet = '0x86d892de0CF9256401df49Aa08d51d0bC75A106d'
+    const app = createApp(baseConfig, createMaterialBalanceServices({ '2': '2', '4': '1' }), undefined, undefined, store)
+
+    try {
+      const createResponse = await request(app, 'POST', '/market/materials', {
+        sellerWallet,
+        materialId: 'MAT-2C',
+        amount: 1,
+        price: 0.00000000001
+      })
+
+      expect(createResponse.status).toBe(200)
+
+      const walletResponse = await request(app, 'GET', `/wallets/${sellerWallet}/materials?ids=2,4`)
+
+      expect(walletResponse.status).toBe(200)
+      expect(walletResponse.body.balances).toEqual([
+        { materialId: '2', amount: '1' },
+        { materialId: '4', amount: '1' }
+      ])
+    } finally {
+      store.close()
+    }
+  })
+
+  it('rejects database material listings that exceed the available unreserved balance', async () => {
+    const store = new ExpeditionStore(':memory:')
+    const sellerWallet = '0x86d892de0CF9256401df49Aa08d51d0bC75A106d'
+    const app = createApp(baseConfig, createMaterialBalanceServices({ '2': '2' }), undefined, undefined, store)
+
+    try {
+      const firstResponse = await request(app, 'POST', '/market/materials', {
+        sellerWallet,
+        materialId: 'MAT-2C',
+        amount: 2,
+        price: 0.00000000001
+      })
+      const secondResponse = await request(app, 'POST', '/market/materials', {
+        sellerWallet,
+        materialId: 'MAT-2C',
+        amount: 1,
+        price: 0.00000000001
+      })
+
+      expect(firstResponse.status).toBe(200)
+      expect(secondResponse.status).toBe(400)
+      expect(secondResponse.body.message).toBe('amount exceeds available material balance')
+    } finally {
+      store.close()
+    }
+  })
 })
+
+function createMaterialBalanceServices(amountsByMaterialId: Record<string, string>): BackendServices {
+  return {
+    getContracts: () => ({
+      chainId: baseConfig.chainId,
+      cryptoPetsAddress: baseConfig.cryptoPetsAddress,
+      cryptoMaterialsAddress: baseConfig.cryptoMaterialsAddress
+    }),
+    getTotalPets: async () => '0',
+    getPetOwner: async () => '',
+    getPet: async () => null,
+    getWalletPets: async () => [],
+    getPetListing: async () => null,
+    getPetMarketListings: async () => [],
+    getMaterialBalance: async (_wallet, materialId) => ({
+      materialId: materialId.toString(),
+      amount: amountsByMaterialId[materialId.toString()] ?? '0'
+    }),
+    getWalletMaterialBalances: async (_wallet, materialIds) => materialIds.map((materialId) => ({
+      materialId: materialId.toString(),
+      amount: amountsByMaterialId[materialId.toString()] ?? '0'
+    })),
+    getMaterialListing: async () => null,
+    getMaterialMarketListings: async () => [],
+    buildPetTx: () => ({ to: '', data: '0x', value: '0', chainId: baseConfig.chainId }),
+    buildMaterialTx: () => ({ to: '', data: '0x', value: '0', chainId: baseConfig.chainId }),
+    sendPetAdminTx: async () => ({ hash: '' }),
+    sendMaterialAdminTx: async () => ({ hash: '' })
+  }
+}
 
 async function request(
   app: ReturnType<typeof createApp>,
