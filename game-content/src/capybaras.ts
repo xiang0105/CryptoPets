@@ -74,10 +74,10 @@ export const statusRules = [
 export const starterCapybaras: StarterCapybaraDefinition[] = [
   {
     id: 'TEST-PET-001',
-    slug: 'capy-san',
+    slug: 'sakikojin',
     name: 'sakiko',
     asset: {
-      image: 'assets/capybaras/capy-san.png',
+      image: 'assets/capybaras/sakikojin.svg',
       alt: { zh: 'sakiko 水豚肖像', en: 'sakiko capybara portrait' },
     },
     element: 'citrus',
@@ -111,10 +111,10 @@ export const starterCapybaras: StarterCapybaraDefinition[] = [
   },
   {
     id: 'TEST-PET-002',
-    slug: 'yuzu-boy',
+    slug: 'max',
     name: 'MAX',
     asset: {
-      image: 'assets/capybaras/yuzu-boy.png',
+      image: 'assets/capybaras/max.svg',
       alt: { zh: 'MAX 水豚肖像', en: 'MAX capybara portrait' },
     },
     element: 'ember',
@@ -148,10 +148,10 @@ export const starterCapybaras: StarterCapybaraDefinition[] = [
   },
   {
     id: 'TEST-PET-003',
-    slug: 'koko',
+    slug: 'sonorato',
     name: 'SONORATO',
     asset: {
-      image: 'assets/capybaras/koko.png',
+      image: 'assets/capybaras/sonorato.svg',
       alt: { zh: 'SONORATO 水豚肖像', en: 'SONORATO capybara portrait' },
     },
     element: 'frost',
@@ -188,10 +188,10 @@ export const starterCapybaras: StarterCapybaraDefinition[] = [
   },
   {
     id: 'TEST-PET-004',
-    slug: 'bobo',
+    slug: 'worrior',
     name: 'CANESAN',
     asset: {
-      image: 'assets/capybaras/bobo.png',
+      image: 'assets/capybaras/worrior-1.svg',
       alt: { zh: 'CANESAN 水豚肖像', en: 'CANESAN capybara portrait' },
     },
     element: 'bloom',

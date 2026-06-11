@@ -1,8 +1,8 @@
 import { starterCapybaras } from '@cryptopets/game-content'
-import boboImage from '@game-content/assets/capybaras/bobo.png'
-import capySanImage from '@game-content/assets/capybaras/capy-san.png'
-import kokoImage from '@game-content/assets/capybaras/koko.png'
-import yuzuBoyImage from '@game-content/assets/capybaras/yuzu-boy.png'
+import worriorImage from '@game-content/assets/capybaras/worrior-1.svg'
+import sakikojinImage from '@game-content/assets/capybaras/sakikojin.svg'
+import sonoratoImage from '@game-content/assets/capybaras/sonorato.svg'
+import maxImage from '@game-content/assets/capybaras/max.svg'
 import yuzuBiteOne from '@game-content/assets/goodies/yuzu-bite-1.png'
 import yuzuBiteTwo from '@game-content/assets/goodies/yuzu-bite-2.png'
 import yuzuBiteThree from '@game-content/assets/goodies/yuzu-bite-3.png'
@@ -18,10 +18,10 @@ import vanillaIcon from '@game-content/assets/goodies/vanilla.svg'
 import yuzuFruitIcon from '@game-content/assets/goodies/yuzu-fruit.svg'
 
 export const capybaraImageBySlug: Record<string, string> = {
-  'capy-san': capySanImage,
-  'yuzu-boy': yuzuBoyImage,
-  koko: kokoImage,
-  bobo: boboImage,
+  'sakikojin': sakikojinImage,
+  'max': maxImage,
+  sonorato: sonoratoImage,
+  worrior: worriorImage,
 }
 
 export const petImages: Record<string, string> = Object.fromEntries(
@@ -39,7 +39,7 @@ export const capybaraImageByName: Record<string, string> = Object.fromEntries(
 ) as Record<string, string>
 
 export function getPetImage(pet: { id: string; name: string; basePetId?: string }) {
-  return petImages[pet.id] ?? (pet.basePetId ? petImages[pet.basePetId] : undefined) ?? capybaraImageByName[pet.name] ?? capybaraImageBySlug['capy-san']
+  return petImages[pet.id] ?? (pet.basePetId ? petImages[pet.basePetId] : undefined) ?? capybaraImageByName[pet.name] ?? capybaraImageBySlug['sakikojin']
 }
 
 export const yuzuBiteFrames = [yuzuBiteOne, yuzuBiteTwo, yuzuBiteThree, yuzuBiteFour]
@@ -81,11 +81,11 @@ export function getMaterialImage(material: { id?: string; materialId?: string; e
 }
 
 export const marketCapybaraSprites = [
-  { id: 'capy-san-a', src: capySanImage, name: 'Capy-San', motion: 'walk-right' },
-  { id: 'koko-a', src: kokoImage, name: 'Koko', motion: 'walk-left' },
-  { id: 'bobo-a', src: boboImage, name: 'Bobo', motion: 'linger' },
-  { id: 'yuzu-boy-a', src: yuzuBoyImage, name: 'Yuzu Boy', motion: 'walk-right' },
-  { id: 'koko-b', src: kokoImage, name: 'Koko', motion: 'linger' },
-  { id: 'capy-san-b', src: capySanImage, name: 'Capy-San', motion: 'walk-left' },
-  { id: 'bobo-b', src: boboImage, name: 'Bobo', motion: 'walk-right' },
+  { id: 'sakikojin-a', src: sakikojinImage, name: 'sakikojin', motion: 'walk-right' },
+  { id: 'sonorato-a', src: sonoratoImage, name: 'sonorato', motion: 'walk-left' },
+  { id: 'worrior-a', src: worriorImage, name: 'worrior', motion: 'linger' },
+  { id: 'max-a', src: maxImage, name: 'Yuzu Boy', motion: 'walk-right' },
+  { id: 'sonorato-b', src: sonoratoImage, name: 'sonorato', motion: 'linger' },
+  { id: 'sakikojin-b', src: sakikojinImage, name: 'sakikojin', motion: 'walk-left' },
+  { id: 'worrior-b', src: worriorImage, name: 'worrior', motion: 'walk-right' },
 ] as const
