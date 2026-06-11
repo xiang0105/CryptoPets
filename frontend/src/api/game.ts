@@ -37,6 +37,10 @@ interface ChainPet {
   iv: number
   level: string
   skin: number
+  exp?: {
+    current: number
+    next: number
+  }
 }
 
 interface WalletMaterialsResponse {
@@ -268,7 +272,7 @@ function decimalEthToWei(value: number) {
 
 async function sendWalletTransaction(transaction: TransactionRequestDto) {
   if (!window.ethereum) {
-    throw new Error('MetaMask is not installed. Please install or enable MetaMask to continue.')
+    throw new Error('WALLET_PROVIDER_MISSING')
   }
 
   const hash = await window.ethereum.request({
@@ -282,7 +286,7 @@ async function sendWalletTransaction(transaction: TransactionRequestDto) {
   })
 
   if (typeof hash !== 'string') {
-    throw new Error('Wallet transaction failed')
+    throw new Error('WALLET_TRANSACTION_FAILED')
   }
 
   return hash
@@ -321,8 +325,8 @@ function mapChainPet(pet: ChainPet, contracts: ContractsResponse): PlayerProfile
       iv: pet.iv,
     },
     exp: {
-      current: 0,
-      next: 100,
+      current: Math.min(Math.max(0, pet.exp?.current ?? 0), pet.exp?.next ? pet.exp.next - 1 : 99),
+      next: pet.exp?.next ?? 100,
     },
     birthTime: '',
   }

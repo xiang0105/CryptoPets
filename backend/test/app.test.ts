@@ -171,6 +171,31 @@ describe('backend app', () => {
     }
   })
 
+  it('does not write cancellation records into recent transactions', async () => {
+    const store = new ExpeditionStore(':memory:')
+    const sellerWallet = '0x86d892de0CF9256401df49Aa08d51d0bC75A106d'
+    const app = createApp(baseConfig, createMaterialBalanceServices({ '2': '10' }), undefined, undefined, store)
+
+    try {
+      const createResponse = await request(app, 'POST', '/market/materials', {
+        sellerWallet,
+        materialId: 'MAT-2C',
+        amount: 1,
+        price: 0.00000000001
+      })
+      const cancelResponse = await request(app, 'POST', `/market/materials/${createResponse.body.listing.id}/cancel`, {
+        sellerWallet
+      })
+      const transactionsResponse = await request(app, 'GET', `/wallets/${sellerWallet}/transactions`)
+
+      expect(createResponse.status).toBe(200)
+      expect(cancelResponse.status).toBe(200)
+      expect(transactionsResponse.body.transactions.map((item: { action: string }) => item.action)).toEqual(['list'])
+    } finally {
+      store.close()
+    }
+  })
+
   it('normalizes chain material ids when creating database listings', async () => {
     const store = new ExpeditionStore(':memory:')
     const sellerWallet = '0x86d892de0CF9256401df49Aa08d51d0bC75A106d'

@@ -10,6 +10,7 @@ import { setExpeditionTeam } from '@/state/expeditionTeam'
 import { getPetImage } from '@/content/gameAssets'
 import logoUrl from '@game-content/assets/branding/logo.png'
 import backgroundMusicUrl from '@game-content/assets/audio/capybara-meadow.mp3'
+import projectReadmeSource from '../../README.md?raw'
 
 const menuItems = computed(() => [
   { label: currentMessages.value.app.nav.home, to: '/' },
@@ -21,6 +22,7 @@ const menuItems = computed(() => [
 const actionItems = computed(() => [
   { label: currentMessages.value.app.actions.music, icon: 'music' },
   { label: currentMessages.value.app.actions.help, icon: 'circle-question' },
+  { label: currentMessages.value.app.actions.readme, icon: 'book-open' },
   { label: currentMessages.value.app.actions.wallet, icon: 'wallet' },
   { label: currentMessages.value.app.actions.monoMode, icon: 'circle-half-stroke' },
 ])
@@ -32,6 +34,7 @@ const starterGiftPets = computed(() => pets.map((pet) => ({
 
 const isMonoMode = ref(false)
 const isHelpPanelOpen = ref(false)
+const isReadmePanelOpen = ref(false)
 const isMusicEnabled = ref(false)
 const isMusicPlaying = ref(false)
 const isLoginConfirmed = ref(false)
@@ -66,7 +69,10 @@ const markdown = new MarkdownIt({
   linkify: true,
   typographer: true,
 })
-const renderedReadme = computed(() => markdown.render(currentMessages.value.app.help.markdown))
+const renderedHelp = computed(() => markdown.render(currentMessages.value.app.help.markdown))
+const renderedProjectReadme = computed(() =>
+  markdown.render(locale.value === 'zh-TW' ? currentMessages.value.app.readme.markdown : projectReadmeSource),
+)
 
 const musicButtonIcon = computed(() => (isMusicPlaying.value ? 'music' : 'volume-xmark'))
 
@@ -142,6 +148,10 @@ function handleAction(icon: string) {
     isHelpPanelOpen.value = true
   }
 
+  if (icon === 'book-open') {
+    isReadmePanelOpen.value = true
+  }
+
   if (icon === 'music') {
     toggleBackgroundMusic()
   }
@@ -215,7 +225,7 @@ onBeforeUnmount(() => {
 <template>
   <audio ref="backgroundMusic" :src="backgroundMusicUrl" loop preload="auto"></audio>
 
-  <section v-if="!isLoginConfirmed" class="login-gate" aria-label="MetaMask login">
+  <section v-if="!isLoginConfirmed" class="login-gate" :aria-label="locale === 'zh-TW' ? '錢包登入' : 'MetaMask login'">
     <div class="login-box">
       <input
         class="wallet-address-input"
@@ -223,7 +233,7 @@ onBeforeUnmount(() => {
         :value="walletAddress"
         :placeholder="walletInputPlaceholder"
         readonly
-        aria-label="Wallet address"
+        :aria-label="locale === 'zh-TW' ? '錢包地址' : 'Wallet address'"
       />
       <button
         class="confirm-login-button"
@@ -263,6 +273,7 @@ onBeforeUnmount(() => {
           :class="{
             active:
               (item.icon === 'circle-half-stroke' && isMonoMode) ||
+              (item.icon === 'book-open' && isReadmePanelOpen) ||
               (item.icon === 'wallet' && walletAddress) ||
               (item.icon === 'music' && isMusicPlaying),
           }"
@@ -338,11 +349,30 @@ onBeforeUnmount(() => {
     <section class="help-panel">
       <header>
         <h2 id="help-panel-title">{{ currentMessages.app.help.title }}</h2>
-        <button type="button" aria-label="Close help" @click="isHelpPanelOpen = false">
+        <button type="button" :aria-label="currentMessages.store.close" @click="isHelpPanelOpen = false">
           <FontAwesomeIcon icon="xmark" aria-hidden="true" />
         </button>
       </header>
-      <div class="markdown-body" v-html="renderedReadme"></div>
+      <div class="markdown-body" v-html="renderedHelp"></div>
+    </section>
+  </div>
+
+  <div
+    v-if="isReadmePanelOpen"
+    class="modal-overlay"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="readme-panel-title"
+    @click.self="isReadmePanelOpen = false"
+  >
+    <section class="help-panel">
+      <header>
+        <h2 id="readme-panel-title">{{ currentMessages.app.readme.title }}</h2>
+        <button type="button" :aria-label="currentMessages.store.close" @click="isReadmePanelOpen = false">
+          <FontAwesomeIcon icon="xmark" aria-hidden="true" />
+        </button>
+      </header>
+      <div class="markdown-body" v-html="renderedProjectReadme"></div>
     </section>
   </div>
 

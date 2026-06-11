@@ -1,3 +1,5 @@
+import { locale } from '@/i18n'
+
 const apiErrorMessages: Record<string, string> = {
   API_ERROR: 'The server could not complete the request. Please try again.',
   ACTIVE_EXPEDITION_EXISTS: 'An expedition is already active. Finish it before starting another one.',
@@ -46,13 +48,74 @@ const apiErrorMessages: Record<string, string> = {
   TRANSACTION_CREATE_FAILED: 'The market action completed but the transaction record could not be saved. Refresh your activity.',
   TRANSACTIONS_LOOKUP_FAILED: 'Transactions could not be loaded. Please try again.',
   VALIDATION_ERROR: 'Some request details were invalid. Please check your selection and try again.',
+  WALLET_PROVIDER_MISSING: 'MetaMask is not installed. Please install or enable MetaMask to continue.',
+  WALLET_SIGNATURE_FAILED: 'Wallet signature failed. Please try again.',
+  WALLET_TRANSACTION_FAILED: 'Wallet transaction failed. Please try again.',
+}
+
+const zhApiErrorMessages: Record<string, string> = {
+  API_ERROR: '伺服器無法完成請求，請稍後再試。',
+  ACTIVE_EXPEDITION_EXISTS: '目前已有進行中的遠征，請先完成它。',
+  AUTH_REQUIRED: '請先用錢包登入。',
+  AUTH_CHALLENGE_EXPIRED: '錢包簽名請求已過期，請重新嘗試。',
+  AUTH_CHALLENGE_USED: '這次錢包簽名請求已使用過，請重新嘗試。',
+  CANNOT_BUY_OWN_LISTING: '不能購買自己上架的商品。',
+  CHAIN_CALL_FAILED: '鏈上請求失敗，請確認網路後重試。',
+  CHAIN_PET_MINT_FAILED: '初始角色建立失敗，請稍後再試。',
+  CHAIN_PET_MINTER_NOT_CONFIGURED: '伺服器尚未設定初始角色建立功能。',
+  CHAIN_PETS_SYNC_FAILED: '角色鏈上資料同步失敗，請稍後再試。',
+  DUPLICATE_PET_IDS: '每隻遠征角色只能選擇一次。',
+  EXPEDITION_ALREADY_ACTIVE: '目前已有進行中的遠征，請先完成它。',
+  EXPEDITION_ALREADY_CLAIMED: '這次遠征獎勵已回報過，請重新整理遠征狀態。',
+  EXPEDITION_CLAIM_CONFLICT: '遠征狀態已變更，無法回報獎勵，請重新整理後再試。',
+  EXPEDITION_CREATE_FAILED: '遠征無法開始，請稍後再試。',
+  EXPEDITION_LOG_CREATE_FAILED: '遠征已開始，但紀錄儲存失敗，請重新整理。',
+  EXPEDITION_LOGS_LOOKUP_FAILED: '遠征紀錄載入失敗，請重新整理遠征狀態。',
+  EXPEDITION_LOOKUP_FAILED: '遠征狀態載入失敗，請稍後再試。',
+  EXPEDITION_NOT_FOUND: '找不到這次遠征，請重新整理遠征狀態。',
+  EXPEDITION_NOT_FINISHED: '遠征尚未結束，請等倒數完成。',
+  EXPEDITION_NOT_READY: '遠征尚未結束，請等倒數完成。',
+  EXPEDITION_WALLET_MISMATCH: '這次遠征屬於另一個錢包。',
+  FRIEND_ALREADY_EXISTS: '這個錢包已經在好友清單中。',
+  INSUFFICIENT_MATERIAL: '素材數量不足。',
+  INTERNAL_SERVER_ERROR: '伺服器發生錯誤，請稍後再試。',
+  INVALID_REQUEST: '請求內容不正確，請確認選擇後再試。',
+  INVALID_AUTH_CHALLENGE: '錢包簽名請求不一致，請重新嘗試。',
+  INVALID_AUTH_TOKEN: '登入狀態已過期，請重新登入。',
+  INVALID_SIGNATURE: '錢包簽名驗證失敗，請重新嘗試。',
+  INVALID_TOKEN: '登入狀態已過期，請重新登入。',
+  PET_NOT_OWNED: '選擇的角色不在目前錢包資料中，請重新整理角色。',
+  PETS_LOOKUP_FAILED: '角色資料檢查失敗，請稍後再試。',
+  LISTING_NOT_ACTIVE: '這件商品已不是有效掛單，請重新整理市場。',
+  MARKET_LISTING_BUY_CONFLICT: '購買時商品狀態已變更，請重新整理市場後再試。',
+  MARKET_LISTING_CANCEL_CONFLICT: '下架時商品狀態已變更，請重新整理市場後再試。',
+  MARKET_LISTING_CREATE_FAILED: '商品上架失敗，請稍後再試。',
+  MARKET_LISTING_NOT_FOUND: '這件商品已不存在，請重新整理市場。',
+  MARKET_LISTING_NOT_OWNED: '只能下架自己的商品。',
+  MARKET_LISTINGS_LOOKUP_FAILED: '市場商品載入失敗，請稍後再試。',
+  MATERIAL_LISTING_NOT_FOUND: '這件商品已不存在，請重新整理市場。',
+  NETWORK_ERROR: '無法連線到後端服務，請確認伺服器已啟動。',
+  PLAYER_NOT_FOUND: '找不到玩家資料，請重新登入。',
+  PET_LISTING_NOT_FOUND: '這件角色商品已不存在，請重新整理市場。',
+  PET_NOT_FOUND: '找不到這隻角色。',
+  TRANSACTION_CREATE_FAILED: '市場操作已完成，但交易紀錄儲存失敗，請重新整理。',
+  TRANSACTIONS_LOOKUP_FAILED: '交易紀錄載入失敗，請稍後再試。',
+  VALIDATION_ERROR: '請求內容不正確，請確認選擇後再試。',
+  WALLET_PROVIDER_MISSING: '尚未安裝或啟用錢包，請先開啟錢包後繼續。',
+  WALLET_SIGNATURE_FAILED: '錢包簽名失敗，請重新嘗試。',
+  WALLET_TRANSACTION_FAILED: '錢包交易失敗，請重新嘗試。',
 }
 
 export function translateApiError(error: unknown, fallback: string) {
   const code = error instanceof Error ? error.message : ''
+  const messages = locale.value === 'zh-TW' ? zhApiErrorMessages : apiErrorMessages
 
-  if (code && apiErrorMessages[code]) {
-    return apiErrorMessages[code]
+  if (code && messages[code]) {
+    return messages[code]
+  }
+
+  if (locale.value === 'zh-TW') {
+    return fallback && !/[A-Za-z_]/.test(fallback) ? fallback : '操作失敗，請稍後再試。'
   }
 
   return code || fallback

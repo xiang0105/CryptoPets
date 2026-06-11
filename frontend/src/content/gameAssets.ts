@@ -46,6 +46,7 @@ export const yuzuBiteFrames = [yuzuBiteOne, yuzuBiteTwo, yuzuBiteThree, yuzuBite
 
 const materialImageById: Record<string, string> = {
   'MAT-2C': yuzuBiteOne,
+  'MAT-3C': persimmonJamIcon,
   'MAT-4B': iceCrystalIcon,
 }
 
@@ -65,8 +66,8 @@ const materialImageBySlug: Record<string, string> = {
 const materialFallbackByElement: Record<number, string> = {
   1: yuzuFruitIcon,
   2: yuzuBiteOne,
-  3: iceCrystalIcon,
-  4: sakuraIcon,
+  3: persimmonJamIcon,
+  4: iceCrystalIcon,
 }
 
 export function getMaterialImage(material: { id?: string; materialId?: string; element?: number; slug?: string }) {

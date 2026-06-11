@@ -44,6 +44,7 @@ export interface ExpeditionApiServices {
   claimReward(body: unknown): Promise<ExpeditionDetails>
   getActiveExpedition(wallet: unknown): ExpeditionDetails | null
   getExpeditionLogs(wallet: unknown): ExpeditionLogEntry[]
+  getWalletPetExperience?(wallet: unknown): Record<string, { current: number; next: number }>
 }
 
 export interface StarterPetApiServices {
@@ -120,7 +121,9 @@ export function createApp(
   app.get('/wallets/:wallet/pets', asyncRoute(async (request, response) => {
     const wallet = readAddress(request.params.wallet, 'wallet')
     const petReader = starterPetServices ?? services
-    response.json({ wallet, pets: await petReader.getWalletPets(wallet) })
+    const pets = await petReader.getWalletPets(wallet)
+    const experience = expeditionServices?.getWalletPetExperience?.(wallet) ?? {}
+    response.json({ wallet, pets: enrichPetExperience(pets, experience) })
   }))
 
   app.get('/market/pets', asyncRoute(async (_request, response) => {
@@ -467,6 +470,23 @@ function requireExpeditionService(expeditionServices: ExpeditionApiServices | un
   }
 
   return expeditionServices
+}
+
+function enrichPetExperience(pets: unknown, experience: Record<string, { current: number; next: number }>) {
+  if (!Array.isArray(pets)) {
+    return pets
+  }
+
+  return pets.map((pet) => {
+    if (!pet || typeof pet !== 'object' || !('tokenId' in pet)) {
+      return pet
+    }
+
+    const tokenId = String((pet as { tokenId: unknown }).tokenId)
+    const exp = experience[tokenId]
+
+    return exp ? { ...pet, exp } : pet
+  })
 }
 
 function requireDbMarketService(dbMarketServices: DbMarketApiServices | undefined) {

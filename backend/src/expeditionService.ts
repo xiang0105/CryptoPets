@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { expeditionForestById, type ExpeditionForest } from './expeditionContent.js'
-import { buildRewardFromEvents, calculateExpeditionOutcome } from './expeditionRules.js'
+import { buildRewardForExpedition, calculateExpeditionOutcome } from './expeditionRules.js'
 import type { ExpeditionStore } from './expeditionStore.js'
 import type {
   ChainExpeditionPet,
@@ -22,7 +22,8 @@ export interface ExpeditionChainService {
   sendMaterialAdminTxAndWait(functionName: string, args: unknown[], confirmations?: number): Promise<{ hash: string }>
 }
 
-const expPerLevel = 100
+const expCap = 99
+const expNext = 100
 
 export class ExpeditionService {
   constructor(
@@ -142,8 +143,15 @@ export class ExpeditionService {
       throw new HttpError(409, 'EXPEDITION_NOT_READY', 'Expedition has not ended')
     }
 
-    const reward = buildRewardFromEvents(expedition.events)
-    await this.levelRewardPets(expedition.petSnapshot, reward)
+    const reward = buildRewardForExpedition(expedition)
+    this.store.addPetExperience({
+      wallet,
+      tokenIds: expedition.petSnapshot.map((pet) => pet.tokenId),
+      exp: reward.exp,
+      now: this.now().toISOString(),
+      expCap,
+      expNext
+    })
     const materialMintTxHash = await this.mintRewardMaterials(wallet, reward)
     const claimedAt = this.now().toISOString()
 
@@ -220,20 +228,9 @@ export class ExpeditionService {
     return lastTxHash
   }
 
-  private async levelRewardPets(pets: ExpeditionPetSnapshot[], reward: ExpeditionReward) {
-    const levelGain = Math.floor(reward.exp / expPerLevel)
-
-    if (levelGain <= 0) {
-      return
-    }
-
-    for (const pet of pets) {
-      await this.chain.sendPetAdminTxAndWait(
-        'setPetLevel',
-        [BigInt(pet.tokenId), BigInt(pet.level + levelGain)],
-        1
-      )
-    }
+  getWalletPetExperience(walletInput: unknown) {
+    const wallet = readAddress(walletInput, 'wallet')
+    return this.store.getWalletPetExperience(wallet)
   }
 
   private withVisibleLogs(details: ExpeditionDetails): ExpeditionDetails {

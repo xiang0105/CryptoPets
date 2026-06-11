@@ -2,6 +2,7 @@ import { computed, ref } from 'vue'
 import type { PlayerProfile } from '@cryptopets/shared'
 import { clearAuthToken } from '@/api/client'
 import { getPlayer } from '@/api/game'
+import { locale } from '@/i18n'
 
 type WalletResetReason = 'none' | 'accountChanged' | 'chainChanged' | 'walletDisconnected'
 
@@ -66,10 +67,46 @@ function getWalletErrorMessage(error: unknown, fallback: string) {
     'code' in error &&
     ((error as { code: unknown }).code === 4001 || (error as { code: unknown }).code === 'ACTION_REJECTED')
   ) {
-    return 'Request rejected in MetaMask. Please approve the wallet prompt to continue.'
+    return locale.value === 'zh-TW'
+      ? '錢包請求已被拒絕，請同意錢包提示後繼續。'
+      : 'Request rejected in MetaMask. Please approve the wallet prompt to continue.'
+  }
+
+  if (locale.value === 'zh-TW') {
+    return fallback
   }
 
   return error instanceof Error ? error.message : fallback
+}
+
+function walletText(key: 'missing' | 'loginFailed' | 'noAccount' | 'accountChanged' | 'disconnected' | 'networkChanged' | 'unsupportedNetwork') {
+  const expected = expectedChainLabel.value || expectedChainId
+
+  if (locale.value !== 'zh-TW') {
+    const en = {
+      missing: 'MetaMask is not installed. Please install or enable MetaMask to continue.',
+      loginFailed: 'Wallet login failed',
+      noAccount: 'No wallet account returned',
+      accountChanged: 'MetaMask account changed. Please sign in again with the selected account.',
+      disconnected: 'MetaMask wallet disconnected. Please connect a wallet to continue.',
+      networkChanged: 'Network changed. Please sign in again.',
+      unsupportedNetwork: `Unsupported network. Please switch MetaMask to chain ${expected}.`,
+    }
+
+    return en[key]
+  }
+
+  const zh = {
+    missing: '尚未安裝或啟用錢包，請先開啟錢包後繼續。',
+    loginFailed: '錢包登入失敗',
+    noAccount: '錢包沒有回傳帳號',
+    accountChanged: '錢包帳號已變更，請用目前帳號重新登入。',
+    disconnected: '錢包已中斷連線，請重新連接錢包。',
+    networkChanged: '網路已變更，請重新登入。',
+    unsupportedNetwork: `不支援目前網路，請切換到鏈 ${expected}。`,
+  }
+
+  return zh[key]
 }
 
 function clearWalletSession(reason: WalletResetReason, message: string, nextWalletAddress = '') {
@@ -98,7 +135,8 @@ function assertSupportedChain() {
   }
 
   const expected = expectedChainLabel.value || expectedChainId
-  throw new Error(`Unsupported network. Please switch MetaMask to chain ${expected}.`)
+  void expected
+  throw new Error(walletText('unsupportedNetwork'))
 }
 
 async function connectWallet() {
@@ -106,7 +144,7 @@ async function connectWallet() {
   walletNotice.value = ''
 
   if (!window.ethereum) {
-    walletError.value = 'MetaMask is not installed. Please install or enable MetaMask to continue.'
+    walletError.value = walletText('missing')
     throw new Error(walletError.value)
   }
 
@@ -119,7 +157,7 @@ async function connectWallet() {
     const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' })
 
     if (!Array.isArray(accounts) || typeof accounts[0] !== 'string') {
-      throw new Error('No wallet account returned')
+      throw new Error(walletText('noAccount'))
     }
 
     const wallet = accounts[0]
@@ -129,7 +167,7 @@ async function connectWallet() {
     walletNotice.value = ''
     walletResetReason.value = 'none'
   } catch (error) {
-    clearWalletSession('none', getWalletErrorMessage(error, 'Wallet login failed'))
+    clearWalletSession('none', getWalletErrorMessage(error, walletText('loginFailed')))
     throw error
   } finally {
     isAuthenticating.value = false
@@ -161,9 +199,7 @@ function handleAccountsChanged(accounts: unknown) {
 
   clearWalletSession(
     nextWallet ? 'accountChanged' : 'walletDisconnected',
-    nextWallet
-      ? 'MetaMask account changed. Please sign in again with the selected account.'
-      : 'MetaMask wallet disconnected. Please connect a wallet to continue.',
+    nextWallet ? walletText('accountChanged') : walletText('disconnected'),
     '',
   )
 }
@@ -172,15 +208,11 @@ function handleChainChanged(nextChainId: unknown) {
   chainId.value = normalizeChainId(nextChainId)
 
   if (isSupportedChain.value) {
-    clearWalletSession('chainChanged', 'Network changed. Please sign in again.', '')
+    clearWalletSession('chainChanged', walletText('networkChanged'), '')
     return
   }
 
-  clearWalletSession(
-    'chainChanged',
-    `Unsupported network. Please switch MetaMask to chain ${expectedChainLabel.value || expectedChainId}.`,
-    '',
-  )
+  clearWalletSession('chainChanged', walletText('unsupportedNetwork'), '')
 }
 
 function registerWalletEvents() {

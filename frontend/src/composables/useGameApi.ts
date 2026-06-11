@@ -282,7 +282,7 @@ function requireWalletAddress() {
 
 async function signAuthMessage(wallet: string, message: string) {
   if (!window.ethereum) {
-    throw new Error('MetaMask is not installed. Please install or enable MetaMask to continue.')
+    throw new Error('WALLET_PROVIDER_MISSING')
   }
 
   const signature = await window.ethereum.request({
@@ -291,7 +291,7 @@ async function signAuthMessage(wallet: string, message: string) {
   })
 
   if (typeof signature !== 'string') {
-    throw new Error('Wallet signature failed')
+    throw new Error('WALLET_SIGNATURE_FAILED')
   }
 
   return signature

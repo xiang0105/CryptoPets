@@ -164,23 +164,17 @@ describe('StoreView', () => {
     expect(wrapper.text()).toContain('Purchase pending: Yuzu Bite')
   })
 
-  it('lists a backpack material through the backend market API', async () => {
+  it('keeps store listing entry disabled because selling is handled by inventory', async () => {
     const wrapper = mountStore()
+    const sellButton = wrapper.get('.sell-banner')
 
-    await wrapper.get('.sell-banner').trigger('click')
+    expect(sellButton.attributes('disabled')).toBeDefined()
+
+    await sellButton.trigger('click')
     await flushPromises()
 
-    expect(loadMaterialBackpack).toHaveBeenCalledWith({ force: true })
-    expect(wrapper.text()).toContain('素材背包')
-
-    const inputs = wrapper.findAll('.inventory-detail input')
-    await inputs[0]!.setValue('3')
-    await inputs[1]!.setValue('88')
-    await wrapper.get('.inventory-detail button').trigger('click')
-    await flushPromises()
-
-    expect(requestListMarketMaterial).toHaveBeenCalledWith('MAT-2C', 3, 88)
-    expect(wrapper.text()).toContain('Listed Yuzu Bite')
+    expect(loadMaterialBackpack).not.toHaveBeenCalledWith({ force: true })
+    expect(requestListMarketMaterial).not.toHaveBeenCalled()
   })
 
   it('cancels an owned listing through the backend market API', async () => {

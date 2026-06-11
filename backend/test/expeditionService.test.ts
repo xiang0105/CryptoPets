@@ -3,7 +3,7 @@ import { Wallet } from 'ethers'
 import { AuthService } from '../src/authService.js'
 import type { AppConfig } from '../src/config.js'
 import { expeditionForestById } from '../src/expeditionContent.js'
-import { calculateExpeditionOutcome } from '../src/expeditionRules.js'
+import { buildRewardForExpedition, calculateExpeditionOutcome } from '../src/expeditionRules.js'
 import { ExpeditionService, type ExpeditionChainService } from '../src/expeditionService.js'
 import { ExpeditionStore } from '../src/expeditionStore.js'
 import type { ChainExpeditionPet, ExpeditionType } from '../src/expeditionTypes.js'
@@ -141,7 +141,11 @@ describe('ExpeditionService', () => {
       ]
     })
     const expedition = await signedStart(context.service, wallet, ['1'], 'orange')
-    const expectedCount = expedition.events.reduce((sum, event) => sum + event.materialAmount, 0)
+    const expectedCount = buildRewardForExpedition({
+      id: expedition.id,
+      expeditionType: expedition.expeditionType,
+      events: expedition.events
+    }).materials.reduce((sum, material) => sum + material.count, 0)
 
     context.now = new Date(Date.parse(expedition.endsAt) + 1000)
     context.chain.onMint = () => {
@@ -172,7 +176,11 @@ describe('ExpeditionService', () => {
       ]
     })
     const expedition = await signedStart(context.service, wallet, ['1'], 'orange')
-    const expectedRewardCount = expedition.events.reduce((sum, event) => sum + event.materialAmount, 0)
+    const expectedRewardCount = buildRewardForExpedition({
+      id: expedition.id,
+      expeditionType: expedition.expeditionType,
+      events: expedition.events
+    }).materials.reduce((sum, material) => sum + material.count, 0)
 
     context.chain.setPet(pet('1', wallet.address, 'Orange', '100', 450))
     context.now = new Date(Date.parse(expedition.endsAt) + 1000)
@@ -185,7 +193,7 @@ describe('ExpeditionService', () => {
     context.store.close()
   })
 
-  it('levels expedition pets when claiming earned experience', async () => {
+  it('adds capped experience to expedition pets when claiming earned experience', async () => {
     const wallet = Wallet.createRandom()
     const expeditionId = findExpeditionId('orange', 5, 450, (rewardCount, exp) => rewardCount > 0 && exp > 0)
     const context = createServiceContext({
@@ -200,13 +208,14 @@ describe('ExpeditionService', () => {
     context.now = new Date(Date.parse(expedition.endsAt) + 1000)
 
     const claimed = await signedClaim(context.service, wallet, expedition.id)
-    const levelGain = Math.floor((claimed.reward?.exp ?? 0) / 100)
+    const expectedExp = Math.min(99, claimed.reward?.exp ?? 0)
 
     expect(claimed.reward?.exp).toBeGreaterThan(0)
-    expect(context.chain.petCalls).toEqual([
-      { functionName: 'setPetLevel', args: [1n, BigInt(2 + levelGain)], confirmations: 1 },
-      { functionName: 'setPetLevel', args: [2n, BigInt(3 + levelGain)], confirmations: 1 }
-    ])
+    expect(context.chain.petCalls).toEqual([])
+    expect(context.store.getWalletPetExperience(wallet.address)).toEqual({
+      '1': { current: expectedExp, next: 100 },
+      '2': { current: expectedExp, next: 100 }
+    })
 
     context.store.close()
   })
@@ -383,7 +392,12 @@ function findExpeditionId(
       totalLevel,
       sumIv
     })
-    const rewardCount = outcome.reward.materials.reduce((sum, material) => sum + material.count, 0)
+    const reward = buildRewardForExpedition({
+      id: expeditionId,
+      expeditionType,
+      events: outcome.events
+    })
+    const rewardCount = reward.materials.reduce((sum, material) => sum + material.count, 0)
 
     if (match(rewardCount, outcome.reward.exp)) {
       return expeditionId

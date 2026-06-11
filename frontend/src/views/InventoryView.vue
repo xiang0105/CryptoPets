@@ -23,7 +23,7 @@ const detailCopy: Record<string, any> = {
   sellAll: '出售',
   quantity: '數量',
   selectMaterialFirst: '請先選擇素材。',
-  actionReserved: '素材操作需等待後端 API 開放，前端不會本地修改資料。',
+  actionReserved: '素材操作尚未開放，資料不會在本地自行變更。',
 }
 Object.assign(detailCopy, {
   title: '物品詳情',
@@ -44,7 +44,7 @@ Object.assign(detailCopy, {
   selectMaterialFirst: '請先選擇素材。',
   useUnavailable: '使用功能暫時尚未開放。',
   discardSuccess: '已送出鏈上丟棄交易。',
-  sellSuccess: '已放入市場 DB，請到商店頁查看掛單。',
+  sellSuccess: '已放入市場，請到商店頁查看掛單。',
   defaultSellPrice: 0.00000000001,
 })
 const shelfPageSize = 20
@@ -116,7 +116,11 @@ const backpackSource = computed(() => {
     return detailCopy.chainReserved
   }
 
-  return backpack.value.chain.enabled ? `Chain ${backpack.value.chain.chainId}` : backpack.value.source
+  if (backpack.value.chain.enabled) {
+    return isZh.value ? `鏈上 ${backpack.value.chain.chainId}` : `Chain ${backpack.value.chain.chainId}`
+  }
+
+  return isZh.value ? '本地資料' : backpack.value.source
 })
 const syncedAt = computed(() => {
   if (!backpack.value?.syncedAt) {
@@ -263,7 +267,7 @@ onBeforeUnmount(() => {
           v-if="hasPreviousShelfPage"
           class="shelf-nav shelf-nav-prev"
           type="button"
-          aria-label="Previous material page"
+          :aria-label="isZh ? '上一頁素材' : 'Previous material page'"
           @click="goShelfPage(-1)"
         >
           <FontAwesomeIcon icon="chevron-left" aria-hidden="true" />
@@ -292,7 +296,7 @@ onBeforeUnmount(() => {
           v-if="hasNextShelfPage"
           class="shelf-nav shelf-nav-next"
           type="button"
-          aria-label="Next material page"
+          :aria-label="isZh ? '下一頁素材' : 'Next material page'"
           @click="goShelfPage(1)"
         >
           <FontAwesomeIcon icon="chevron-right" aria-hidden="true" />

@@ -12,6 +12,7 @@ export interface AppMessages {
     musicOn: string
     musicOff: string
     help: string
+    readme: string
     wallet: string
     monoMode: string
     switchLanguage: string
@@ -29,6 +30,10 @@ export interface AppMessages {
     next: string
   }
   help: {
+    title: string
+    markdown: string
+  }
+  readme: {
     title: string
     markdown: string
   }
@@ -57,6 +62,10 @@ export interface HomeMessages {
   level: string
   hp: string
   exp: string
+  iv: string
+  atk: string
+  def: string
+  id: string
   routeStrong: string
   routeSteady: string
   routeWeak: string
@@ -124,6 +133,8 @@ export interface PetsMessages {
   removeTeam: string
   stationTitle: string
   level: string
+  hp: string
+  exp: string
   expUpgrade: string
   intro: string
   skillDesign: string
@@ -147,6 +158,8 @@ export interface PetsMessages {
   element: string
   owner: string
   token: string
+  atk: string
+  def: string
   stage: string
   birth: string
   animation: string

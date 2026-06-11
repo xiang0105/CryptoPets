@@ -1,15 +1,19 @@
 import crypto from 'node:crypto'
 import type { ExpeditionForest, StoryBeat, StoryOutcome } from './expeditionContent.js'
-import type { ExpeditionEventResult, ExpeditionReward } from './expeditionTypes.js'
+import type { ExpeditionEventResult, ExpeditionRecord, ExpeditionReward, ExpeditionType } from './expeditionTypes.js'
 
 const penaltyTags = new Set(['damage-display', 'poison', 'slow', 'stun'])
-export const expPerSuccessfulEvent = 100
+export const expPerSuccessfulEvent = 25
 
 export function successChance(totalLevel: number, difficulty: number) {
   return clamp(30 + totalLevel * 8 - difficulty * 10, 10, 95)
 }
 
 export function materialIdForForest(forestId: string) {
+  if (forestId === 'apple') {
+    return '3'
+  }
+
   if (forestId === 'snow-peach') {
     return '4'
   }
@@ -24,6 +28,24 @@ export function materialAmountPerSuccessfulEvent(sumIv: number) {
 export function rollForEvent(expeditionId: string, eventId: string, index: number) {
   const hash = crypto.createHash('sha256').update(`${expeditionId}:${eventId}:${index}`).digest()
   return hash[0] % 100
+}
+
+export function rewardMaterialAmount(expeditionId: string) {
+  const hash = crypto.createHash('sha256').update(`${expeditionId}:reward:material-amount`).digest()
+  return 1 + (hash[0] % 5)
+}
+
+export function bonusMaterialRoll(expeditionId: string) {
+  const hash = crypto.createHash('sha256').update(`${expeditionId}:reward:bonus-material`).digest()
+  return hash[0] % 100
+}
+
+export function bonusMaterialId(expeditionId: string, expeditionType: ExpeditionType) {
+  const candidates = ['orange', 'apple', 'snow-peach']
+    .filter((forestId) => forestId !== expeditionType)
+    .map(materialIdForForest)
+  const hash = crypto.createHash('sha256').update(`${expeditionId}:reward:bonus-material-id`).digest()
+  return candidates[hash[0] % candidates.length] ?? materialIdForForest(expeditionType)
 }
 
 export function calculateExpeditionOutcome(input: {
@@ -81,7 +103,6 @@ export function calculateExpeditionOutcome(input: {
 }
 
 export function buildRewardFromEvents(events: ExpeditionEventResult[]): ExpeditionReward {
-  const materialsById = new Map<string, number>()
   let successfulEvents = 0
 
   for (const event of events) {
@@ -90,16 +111,32 @@ export function buildRewardFromEvents(events: ExpeditionEventResult[]): Expediti
     }
 
     successfulEvents += 1
-
-    if (event.materialId && event.materialAmount > 0) {
-      materialsById.set(event.materialId, (materialsById.get(event.materialId) ?? 0) + event.materialAmount)
-    }
   }
 
   return {
     exp: successfulEvents * expPerSuccessfulEvent,
     sepoliaAmount: '0',
-    materials: [...materialsById].map(([id, count]) => ({ id, count }))
+    materials: []
+  }
+}
+
+export function buildRewardForExpedition(expedition: Pick<ExpeditionRecord, 'id' | 'expeditionType' | 'events'>): ExpeditionReward {
+  const baseReward = buildRewardFromEvents(expedition.events)
+
+  if (baseReward.exp <= 0) {
+    return baseReward
+  }
+
+  const materialId = materialIdForForest(expedition.expeditionType)
+  const materials = [{ id: materialId, count: rewardMaterialAmount(expedition.id) }]
+
+  if (bonusMaterialRoll(expedition.id) < 10) {
+    materials.push({ id: bonusMaterialId(expedition.id, expedition.expeditionType), count: 1 })
+  }
+
+  return {
+    ...baseReward,
+    materials
   }
 }
 

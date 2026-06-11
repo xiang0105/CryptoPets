@@ -22,7 +22,6 @@ const storeCopy = {
   select: '選擇',
   amount: '數量',
   price: '價格',
-  priceUnit: 'Sepolia',
   listItem: '上架素材',
   listing: '上架中',
   cancelListing: '取消上架',
@@ -100,7 +99,7 @@ const transactions = computed(() => {
 
     return {
       action: item.action,
-      name: definition ? (isZh.value ? definition.name.zh : definition.name.en) : (item.materialId ?? 'Sepolia'),
+      name: definition ? (isZh.value ? definition.name.zh : definition.name.en) : (item.materialId ?? currencyUnit()),
       amount: Number(item.sepoliaAmount),
     }
   }).slice(0, 8)
@@ -124,12 +123,34 @@ function gradeLabel(grade: string) {
   return grade
 }
 
+function currencyUnit() {
+  return isZh.value ? text.value.sepolia : 'Sepolia'
+}
+
 function marketAmount(amount: number) {
-  return amount === 0 ? '-' : `${amount > 0 ? '+' : ''}${amount} Sepolia`
+  return amount === 0 ? '-' : `${amount > 0 ? '+' : ''}${amount} ${currencyUnit()}`
 }
 
 function formatSepoliaPrice(price: number) {
-  return `${price} ${storeCopy.priceUnit}`
+  return `${price} ${currencyUnit()}`
+}
+
+function transactionActionLabel(action: string) {
+  if (!isZh.value) {
+    return action
+  }
+
+  const labels: Record<string, string> = {
+    reward: '獎勵',
+    list: '上架',
+    buy: '購買',
+    sell: '售出',
+    cancel: '下架',
+    upgrade: '升級',
+    advance: '突破',
+  }
+
+  return labels[action] ?? '交易'
 }
 
 function removeListingLabel() {
@@ -274,7 +295,7 @@ onMounted(() => {
       class="store-shelf"
       :class="[`switch-${shelfDirection}`, { 'is-switching': shelfSwitching }]"
       :data-page="shelfPage"
-      aria-label="Goodies store shelf"
+      :aria-label="isZh ? '素材商店貨架' : 'Goodies store shelf'"
     >
       <div v-if="isMarketLoading || marketError || storeGoodies.length === 0" class="market-state" aria-live="polite">
         <strong v-if="isMarketLoading">{{ isZh ? '載入市場中...' : 'Loading market...' }}</strong>
@@ -322,7 +343,7 @@ onMounted(() => {
               {{ gradeLabel(goodie.grade) }}
             </span>
           </header>
-          <div class="image-slot" aria-label="Product image">
+          <div class="image-slot" :aria-label="isZh ? '商品圖片' : 'Product image'">
             <img v-if="goodie.imageUrl" :src="goodie.imageUrl" :alt="displayName(goodie)" draggable="false" />
           </div>
           <footer>
@@ -340,7 +361,7 @@ onMounted(() => {
             </button>
           </footer>
         </template>
-        <div v-else class="empty-product-slot" aria-label="Empty product slot"></div>
+        <div v-else class="empty-product-slot" :aria-label="isZh ? '空商品格' : 'Empty product slot'"></div>
       </article>
 
       <button
@@ -358,7 +379,7 @@ onMounted(() => {
 
     <section class="market-workspace">
       <div class="stage-wrap">
-        <div class="animation-slot" aria-label="Marketplace animation">
+        <div class="animation-slot" :aria-label="isZh ? '市場動畫' : 'Marketplace animation'">
           <div class="market-town" :style="{ '--market-map': `url(${marketMap})` }" aria-hidden="true">
             <div class="crowd">
               <div
@@ -370,7 +391,7 @@ onMounted(() => {
                 <img
                   class="crowd-capy"
                   :src="capybara.src"
-                  :alt="`${capybara.name} browsing the market`"
+                  :alt="isZh ? `${capybara.name} 正在逛市場` : `${capybara.name} browsing the market`"
                   draggable="false"
                 />
               </div>
@@ -378,7 +399,7 @@ onMounted(() => {
           </div>
         </div>
 
-        <button class="sell-banner" type="button" @click="openInventoryModal">
+        <button class="sell-banner" type="button" disabled aria-disabled="true">
           <span class="basket" aria-hidden="true"></span>
           <span>
             <strong>{{ text.listItem }}</strong>
@@ -387,7 +408,7 @@ onMounted(() => {
         </button>
       </div>
 
-      <section class="overview-panel" aria-label="Marketplace overview">
+      <section class="overview-panel" :aria-label="isZh ? '市場概況' : 'Marketplace overview'">
         <header>
           <h2>{{ text.overview }}</h2>
         </header>
@@ -402,7 +423,7 @@ onMounted(() => {
                 </strong>
                 <template v-else>
                   <strong>{{ isZh ? '目前沒有上架商品' : text.emptyListings }}</strong>
-                  <span>{{ isZh ? '你目前沒有自己的 active 掛單。' : 'You do not have active listings yet.' }}</span>
+                  <span>{{ isZh ? '你目前沒有自己的有效掛單。' : 'You do not have active listings yet.' }}</span>
                 </template>
               </div>
               <article
@@ -453,7 +474,7 @@ onMounted(() => {
                 {{ isZh ? '尚無交易紀錄' : 'No transactions yet' }}
               </p>
               <p v-for="item in transactions" :key="`${item.action}-${item.name}`">
-                <strong>{{ item.action }}: {{ item.name }}</strong>
+                <strong>{{ transactionActionLabel(item.action) }}: {{ item.name }}</strong>
                 <span :class="{ gain: item.amount > 0 }">
                   {{ marketAmount(item.amount) }}
                 </span>
@@ -465,7 +486,7 @@ onMounted(() => {
               <strong class="reputation-score">0</strong>
               <div class="reputation-row">
                 <span class="pet-mark" aria-hidden="true"></span>
-                <div class="reputation-meter" aria-label="Marketplace reputation">
+                <div class="reputation-meter" :aria-label="isZh ? '市場評價' : 'Marketplace reputation'">
                   <i></i>
                 </div>
                 <span class="flower-mark" aria-hidden="true"></span>
@@ -488,7 +509,7 @@ onMounted(() => {
       <section class="inventory-modal">
         <header>
           <h2 id="inventory-listing-title">{{ storeCopy.backpackTitle }}</h2>
-          <button type="button" aria-label="Close" @click="closeInventoryModal">×</button>
+          <button type="button" :aria-label="text.close" @click="closeInventoryModal">×</button>
         </header>
 
         <div class="inventory-layout">
@@ -550,7 +571,7 @@ onMounted(() => {
             <label>
               {{ storeCopy.price }}
               <input v-model.number="listingPrice" type="number" min="0.00000000001" step="0.00000000001" />
-              <small>{{ storeCopy.priceUnit }}</small>
+              <small>{{ currencyUnit() }}</small>
             </label>
             <button type="button" :disabled="operationLoading.listMarketMaterial" @click="listSelectedGoodie">
               {{ operationLoading.listMarketMaterial ? storeCopy.listing : storeCopy.listItem }}
@@ -1150,6 +1171,12 @@ onMounted(() => {
     inset 0 0 0 7px #fff7df,
     0 4px 0 rgba(83, 52, 31, 0.25);
   transform: none;
+}
+
+.sell-banner:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.24);
+  opacity: 0.72;
 }
 
 .store-shelf.is-switching .goodie-card {

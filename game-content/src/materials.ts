@@ -37,15 +37,27 @@ export const materialDefinitions: MaterialDefinition[] = [
   },
   {
     id: 'MAT-4B',
-    slug: 'snow-peach',
+    slug: 'ice-crystal',
     asset: {
       imageFrames: [],
       iconKey: 'material-4',
     },
-    name: { zh: '冰霜蜜桃', en: 'Snow Peach' },
+    name: { zh: '冰晶', en: 'Ice Crystal' },
     element: 4,
     grade: 'B',
-    description: '在寒冷森林中凝結甜香的稀有果實。暫以冰晶素材圖示代表，之後可替換成正式蜜桃圖。',
+    description: '水蜜桃雪森深處凝結出的透明冰晶，帶有穩定寒氣，可作為高階強化或冰霜料理素材。',
+  },
+  {
+    id: 'MAT-3C',
+    slug: 'persimmon-jam',
+    asset: {
+      imageFrames: [],
+      iconKey: 'material-3',
+    },
+    name: { zh: '柿子果醬', en: 'Persimmon Jam' },
+    element: 3,
+    grade: 'C',
+    description: '蘋果森林商隊留下的甜柿果醬，適合作為料理、交易與後續支援型強化素材。',
   },
 ]
 

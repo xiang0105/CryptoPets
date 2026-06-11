@@ -1,5 +1,6 @@
 import type { PetElement } from '@cryptopets/game-content'
 import type { LocalizedText, PetSkillDefinition } from '@cryptopets/game-content'
+import { reactive } from 'vue'
 
 export type { PetElement }
 
@@ -32,7 +33,7 @@ export interface Pet {
 }
 
 // Backend API is the source of truth. This cache is only a view model store.
-export const pets: Pet[] = []
+export const pets = reactive<Pet[]>([])
 
 export function replacePets(nextPets: Pet[]) {
   pets.splice(0, pets.length, ...nextPets)

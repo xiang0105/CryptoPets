@@ -85,16 +85,31 @@ const remainingTime = computed(() => {
     return text.value.ready
   }
 
-  const nextAt = activeExpedition.value.finishAt
+  const nextAt = nextScheduledEventAt.value
   const seconds = Math.max(0, Math.ceil((nextAt - now.value) / 1000))
   const minutes = Math.floor(seconds / 60)
   const restSeconds = seconds % 60
 
   return `${minutes}:${String(restSeconds).padStart(2, '0')}`
 })
+const nextScheduledEventAt = computed(() => {
+  if (!activeExpedition.value || !selectedForest.value) {
+    return now.value
+  }
+
+  const startedAt = activeExpedition.value.startedAt
+  const finishAt = activeExpedition.value.finishAt
+  const duration = finishAt - startedAt
+  const eventCount = selectedForest.value.scriptEvents.length
+  const eventTimes = selectedForest.value.scriptEvents.map((_, index) =>
+    startedAt + Math.floor((duration * (index + 1)) / (eventCount + 1)),
+  )
+
+  return eventTimes.find((eventAt) => eventAt > now.value) ?? finishAt
+})
 const isExpeditionComplete = computed(() => Boolean(activeExpedition.value && now.value >= activeExpedition.value.finishAt))
 const missionName = computed(() => selectedForest.value ? displayForestName(selectedForest.value) : text.value.missionName)
-const missionGoal = computed(() => selectedForest.value ? selectedForest.value.reward : text.value.chooseForest)
+const missionGoal = computed(() => selectedForest.value ? displayForestReward(selectedForest.value) : text.value.chooseForest)
 const missionStatus = computed(() => {
   if (!activeExpedition.value) {
     return text.value.ready
@@ -143,6 +158,11 @@ function displayForestName(forest: ForestOption) {
 
 function displayForestSummary(forest: ForestOption) {
   return isZh.value ? forest.summary.zh : forest.summary.en
+}
+
+function displayForestReward(forest: ForestOption) {
+  const [zhReward, enReward] = forest.reward.split('/').map((part) => part.trim())
+  return isZh.value ? (zhReward || forest.reward) : (enReward || forest.reward)
 }
 
 function loadStoredExpedition(): ExpeditionRecord | null {
@@ -371,7 +391,7 @@ onUnmounted(() => {
             >
               <strong>{{ displayForestName(forest) }}</strong>
               <span>{{ displayForestSummary(forest) }}</span>
-              <small>Lv. {{ forest.difficulty }} · {{ forest.durationSeconds }}s · {{ forest.reward }}</small>
+              <small>{{ text.level }} {{ forest.difficulty }} · {{ forest.durationSeconds }} {{ isZh ? '秒' : 's' }} · {{ displayForestReward(forest) }}</small>
               <b>{{ text.start }}</b>
             </button>
             <div v-if="expeditionStatusError" class="expedition-api-state" aria-live="polite">
@@ -400,7 +420,7 @@ onUnmounted(() => {
                 class="scene-pet-avatar"
                 :class="pet.element"
                 :src="getPetImage(pet)"
-                :alt="`${pet.name} capybara`"
+                :alt="isZh ? `${pet.name} 水豚` : `${pet.name} capybara`"
                 draggable="false"
               />
             </div>
@@ -482,7 +502,7 @@ onUnmounted(() => {
 
           <div class="pet-body">
             <div class="portrait">
-              <img :src="getPetImage(pet)" :alt="`${pet.name} portrait`" draggable="false" />
+              <img :src="getPetImage(pet)" :alt="isZh ? `${pet.name} 肖像` : `${pet.name} portrait`" draggable="false" />
             </div>
 
             <div class="meter-block">
@@ -505,19 +525,19 @@ onUnmounted(() => {
 
           <dl class="stat-grid">
             <div>
-              <dt>IV</dt>
+              <dt>{{ text.iv }}</dt>
               <dd>{{ pet.stats.iv }}</dd>
             </div>
             <div>
-              <dt>ATK</dt>
+              <dt>{{ text.atk }}</dt>
               <dd>{{ pet.stats.atk }}</dd>
             </div>
             <div>
-              <dt>DEF</dt>
+              <dt>{{ text.def }}</dt>
               <dd>{{ pet.stats.def }}</dd>
             </div>
             <div>
-              <dt>ID</dt>
+              <dt>{{ text.id }}</dt>
               <dd>{{ pet.tokenId }}</dd>
             </div>
           </dl>

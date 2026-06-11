@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { ExpeditionForest } from '../src/expeditionContent.js'
 import {
+  buildRewardForExpedition,
   calculateExpeditionOutcome,
   materialAmountPerSuccessfulEvent,
   materialIdForForest,
+  rewardMaterialAmount,
   rollForEvent,
   successChance
 } from '../src/expeditionRules.js'
@@ -28,7 +30,7 @@ describe('expedition rules', () => {
 
   it('maps expedition type to material id', () => {
     expect(materialIdForForest('orange')).toBe('2')
-    expect(materialIdForForest('apple')).toBe('2')
+    expect(materialIdForForest('apple')).toBe('3')
     expect(materialIdForForest('snow-peach')).toBe('4')
   })
 
@@ -61,7 +63,7 @@ describe('expedition rules', () => {
     expect(outcome.events[1].chance).toBe(successChance(1, 1))
   })
 
-  it('successful events give mapped material amount', () => {
+  it('successful events give exp and expedition reward gives fixed forest material amount', () => {
     const forest = makeForest({
       difficulty: 1,
       events: [
@@ -82,8 +84,18 @@ describe('expedition rules', () => {
     expect(outcome.events[0].success).toBe(true)
     expect(outcome.events[0].materialId).toBe('2')
     expect(outcome.events[0].materialAmount).toBe(3)
-    expect(outcome.reward.materials).toEqual([{ id: '2', count: 3 }])
-    expect(outcome.reward.exp).toBe(100)
+    expect(outcome.reward.exp).toBe(25)
+    expect(outcome.reward.materials).toEqual([])
+
+    const reward = buildRewardForExpedition({
+      id: expeditionId,
+      expeditionType: 'orange',
+      events: outcome.events
+    })
+
+    expect(reward.materials[0]).toEqual({ id: '2', count: rewardMaterialAmount(expeditionId) })
+    expect(reward.materials[0].count).toBeGreaterThanOrEqual(1)
+    expect(reward.materials[0].count).toBeLessThanOrEqual(5)
   })
 
   it('failed events give no material', () => {

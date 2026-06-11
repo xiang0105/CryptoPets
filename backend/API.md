@@ -543,7 +543,7 @@ Request：
 
 ## 遠征 API
 
-遠征在後端執行。claim 成功時，後端會先把本趟獲得的 EXP 轉成角色等級並呼叫 `CryptoPets.setPetLevel(tokenId, level)` 寫回出戰角色，再依獎勵發放鏈上素材；相關鏈上交易都等待 1 confirmation 後才標記 claimed。
+遠征在後端執行。claim 成功時，後端會把本趟獲得的 EXP 累積到出戰角色的單級經驗進度，不直接提升等級；素材獎勵會依劇本固定素材發放，相關鏈上交易都等待 1 confirmation 後才標記 claimed。
 
 ### 遠征簽名流程
 
@@ -568,12 +568,14 @@ Request：
 - 暫時 level penalty 只影響本趟遠征事件判定，不寫回 pet。
 - 遠征事件 log 會依 `occurred_at` 顯示；尚未發生的事件與結束 log 不會提前回傳給玩家。
 - claim 使用開始遠征時已保存的事件結果結算，不會重新計算遠征成敗。
-- 每個成功事件給 100 EXP。
-- claim 時每滿 100 EXP，出戰角色各提升 1 level。
-- 只有成功事件會給素材。
-- 每個成功事件素材量：`1 + floor(sumIv / 200)`。
-- `orange` 與 `apple` 發 `materialId "2"`，對應前端素材 `MAT-2C`。
-- `snow-peach` 發 `materialId "4"`，對應前端素材 `MAT-4B`。
+- 每個成功事件給 25 EXP。
+- claim 時不直接提升等級；出戰角色會各自累積 EXP，單級進度上限為 99/100。
+- 至少有成功事件時才會給素材。
+- 劇本固定素材量為 `1-5`，由 `sha256(expeditionId:reward:material-amount)` 決定。
+- 另有 10% 機率額外獲得 1 個非當前劇本固定素材。
+- `orange` 發 `materialId "2"`，對應前端素材 `MAT-2C` 柚子果。
+- `apple` 發 `materialId "3"`，對應前端素材 `MAT-3C` 柿子果醬。
+- `snow-peach` 發 `materialId "4"`，對應前端素材 `MAT-4B` 冰晶。
 
 ### `POST /auth/nonce`
 

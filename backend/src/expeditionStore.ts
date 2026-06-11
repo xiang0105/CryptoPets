@@ -101,6 +101,12 @@ interface PlayerTransactionRow {
   created_at: string
 }
 
+export interface PetExperienceRecord {
+  tokenId: string
+  current: number
+  next: number
+}
+
 export class ExpeditionStore {
   private db: Database.Database
 
@@ -243,31 +249,11 @@ export class ExpeditionStore {
       return null
     }
 
-    const transaction: PlayerTransaction = {
-      id: `${input.listingId}-cancel-${Date.now()}`,
-      action: 'cancel',
-      materialId: existing.materialId,
-      materialAmount: existing.amount,
-      sepoliaAmount: '0',
-      createdAt: input.now
-    }
-
-    const transactionRunner = this.db.transaction(() => {
-      this.db.prepare(`
-        update market_material_listings
-        set status = 'cancelled', updated_at = ?
-        where id = ? and status = 'active'
-      `).run(input.now, input.listingId)
-      this.db.prepare(`
-        insert into player_transactions (id, wallet, action, material_id, material_amount, sepolia_amount, created_at)
-        values (@id, @wallet, @action, @materialId, @materialAmount, @sepoliaAmount, @createdAt)
-      `).run({
-        ...transaction,
-        wallet: input.sellerWallet
-      })
-    })
-
-    transactionRunner()
+    this.db.prepare(`
+      update market_material_listings
+      set status = 'cancelled', updated_at = ?
+      where id = ? and status = 'active'
+    `).run(input.now, input.listingId)
     return this.getMarketListing(input.listingId)
   }
 
@@ -321,10 +307,47 @@ export class ExpeditionStore {
 
   listPlayerTransactions(wallet: string): PlayerTransaction[] {
     const rows = this.db
-      .prepare('select * from player_transactions where wallet = ? order by created_at desc, id desc limit 100')
+      .prepare("select * from player_transactions where wallet = ? and action <> 'cancel' order by created_at desc, id desc limit 100")
       .all(wallet) as PlayerTransactionRow[]
 
     return rows.map(mapPlayerTransaction)
+  }
+
+  addPetExperience(input: { wallet: string; tokenIds: string[]; exp: number; now: string; expCap?: number; expNext?: number }) {
+    const expCap = input.expCap ?? 99
+    const expNext = input.expNext ?? 100
+    const rows = this.getWalletPetExperience(input.wallet)
+    const upsert = this.db.prepare(`
+      insert into pet_experience (wallet, token_id, current_exp, next_exp, updated_at)
+      values (@wallet, @tokenId, @currentExp, @nextExp, @updatedAt)
+      on conflict(wallet, token_id) do update set
+        current_exp = excluded.current_exp,
+        next_exp = excluded.next_exp,
+        updated_at = excluded.updated_at
+    `)
+
+    const transactionRunner = this.db.transaction(() => {
+      for (const tokenId of input.tokenIds) {
+        const existing = rows[tokenId]?.current ?? 0
+        upsert.run({
+          wallet: input.wallet,
+          tokenId,
+          currentExp: Math.min(expCap, Math.max(0, existing + input.exp)),
+          nextExp: expNext,
+          updatedAt: input.now
+        })
+      }
+    })
+
+    transactionRunner()
+  }
+
+  getWalletPetExperience(wallet: string): Record<string, { current: number; next: number }> {
+    const rows = this.db
+      .prepare('select token_id, current_exp, next_exp from pet_experience where wallet = ?')
+      .all(wallet) as Array<{ token_id: string; current_exp: number; next_exp: number }>
+
+    return Object.fromEntries(rows.map((row) => [row.token_id, { current: row.current_exp, next: row.next_exp }]))
   }
 
   getActiveExpedition(wallet: string): ExpeditionDetails | null {
@@ -532,6 +555,15 @@ export class ExpeditionStore {
         created_at text not null
       );
 
+      create table if not exists pet_experience (
+        wallet text not null,
+        token_id text not null,
+        current_exp integer not null,
+        next_exp integer not null,
+        updated_at text not null,
+        primary key (wallet, token_id)
+      );
+
       create index if not exists auth_nonces_wallet_idx on auth_nonces(wallet);
       create index if not exists expeditions_wallet_status_idx on expeditions(wallet, status);
       create index if not exists expedition_logs_wallet_time_idx on expedition_logs(wallet, occurred_at);
@@ -539,6 +571,7 @@ export class ExpeditionStore {
       create index if not exists market_material_listings_status_idx on market_material_listings(status, created_at);
       create index if not exists market_material_listings_seller_idx on market_material_listings(seller_wallet, status);
       create index if not exists player_transactions_wallet_time_idx on player_transactions(wallet, created_at);
+      create index if not exists pet_experience_wallet_idx on pet_experience(wallet);
 
       update player_transactions
       set sepolia_amount = '0'

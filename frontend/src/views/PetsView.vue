@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { goodies } from '@/data/goodies'
 import { pets, type Pet } from '@/data/pets'
 import { useGameApi } from '@/composables/useGameApi'
 import { expeditionTeamIds, isPetInExpeditionTeam, maxTeamSlots, setExpeditionTeamSlot } from '@/state/expeditionTeam'
 import { currentMessages, isZh } from '@/i18n'
-import { getPetImage } from '@/content/gameAssets'
-import { petElementMeta, statusRules } from '@cryptopets/game-content'
+import { getMaterialImage, getPetImage } from '@/content/gameAssets'
+import { materialDefinitions, petElementMeta, statusRules } from '@cryptopets/game-content'
 
 const maxPetSlots = 20
 const localPets = ref<Pet[]>([])
@@ -60,7 +59,7 @@ const petSlots = computed<(Pet | null)[]>(() => [
 const breakthroughRows = computed(() =>
   breakthroughMaterials.map((requirement) => ({
     ...requirement,
-    goodie: goodies.find((goodie) => goodie.id === requirement.id),
+    material: materialDefinitions.find((material) => material.id === requirement.id),
   })),
 )
 
@@ -185,6 +184,12 @@ function confirmBreakthrough() {
   nurtureMessage.value = isZh.value
     ? '突破尚未開放後端接口，前端不會本地修改資料。'
     : 'Advancement is waiting for a backend API; frontend data was not changed.'
+}
+
+function expFullRequirement() {
+  return isZh.value
+    ? `需要 ${text.value.level} ${breakthroughRequiredLevel.value} 且經驗滿`
+    : `Requires ${text.value.level} ${breakthroughRequiredLevel.value} and full EXP`
 }
 
 function syncLocalPetsFromApi() {
@@ -315,12 +320,12 @@ onMounted(() => {
             </div>
 
             <div class="stat-meter hp">
-              <span>HP:</span>
+              <span>{{ text.hp }}:</span>
               <div><i :style="{ width: `${(selectedPet.stats.hp / selectedPet.stats.maxHp) * 100}%` }"></i></div>
               <b>{{ selectedPet.stats.hp }}/{{ selectedPet.stats.maxHp }}</b>
             </div>
             <div class="stat-meter exp">
-              <span>EXP:</span>
+              <span>{{ text.exp }}:</span>
               <div><i :style="{ width: `${(selectedPet.exp.current / selectedPet.exp.next) * 100}%` }"></i></div>
               <b>{{ selectedPet.exp.current }}/{{ selectedPet.exp.next }}</b>
             </div>
@@ -345,11 +350,11 @@ onMounted(() => {
                 <dd>{{ displayElement(selectedPet.element) }}</dd>
               </div>
               <div>
-                <dt>ATK</dt>
+                <dt>{{ text.atk }}</dt>
                 <dd>{{ selectedPet.stats.atk }}</dd>
               </div>
               <div>
-                <dt>DEF</dt>
+                <dt>{{ text.def }}</dt>
                 <dd>{{ selectedPet.stats.def }}</dd>
               </div>
             </dl>
@@ -404,11 +409,18 @@ onMounted(() => {
               </h4>
               <div class="material-list advance-list">
                 <p class="breakthrough-requirement">
-                  {{ isZh ? `需要 ${text.level}${breakthroughRequiredLevel} 且 EXP 滿` : `Requires ${text.level} ${breakthroughRequiredLevel} and full EXP` }}
+                  {{ expFullRequirement() }}
                 </p>
                 <article v-for="row in breakthroughRows" :key="row.id">
-                  <div class="material-image" aria-hidden="true"></div>
-                  <span>{{ row.goodie ? (isZh ? row.goodie.name.zh : row.goodie.name.en) : row.id }}</span>
+                  <img
+                    v-if="row.material"
+                    class="material-image"
+                    :src="getMaterialImage(row.material)"
+                    :alt="isZh ? row.material.name.zh : row.material.name.en"
+                    draggable="false"
+                  />
+                  <div v-else class="material-image" aria-hidden="true"></div>
+                  <span>{{ row.material ? (isZh ? row.material.name.zh : row.material.name.en) : row.id }}</span>
                   <strong>x{{ row.count }}</strong>
                 </article>
               </div>
