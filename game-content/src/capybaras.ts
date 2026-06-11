@@ -151,7 +151,7 @@ export const starterCapybaras: StarterCapybaraDefinition[] = [
     slug: 'sonorato',
     name: 'SONORATO',
     asset: {
-      image: 'assets/capybaras/sonorato.svg',
+      image: 'assets/capybaras/SONORATO-1.svg',
       alt: { zh: 'SONORATO 水豚肖像', en: 'SONORATO capybara portrait' },
     },
     element: 'frost',
@@ -191,7 +191,7 @@ export const starterCapybaras: StarterCapybaraDefinition[] = [
     slug: 'worrior',
     name: 'CANESAN',
     asset: {
-      image: 'assets/capybaras/worrior-1.svg',
+      image: 'assets/capybaras/warrior-1.svg',
       alt: { zh: 'CANESAN 水豚肖像', en: 'CANESAN capybara portrait' },
     },
     element: 'bloom',
