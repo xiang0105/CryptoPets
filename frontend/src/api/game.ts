@@ -109,11 +109,7 @@ export async function getMaterialBackpack(wallet: string) {
 
   return {
     sepoliaBalance: '0',
-    inventory: balancesResponse.balances.map((balance) => ({
-      materialId: chainMaterialIdToContentId(balance.materialId),
-      amount: Number(balance.amount),
-      updatedAt: new Date().toISOString(),
-    })),
+    inventory: mergeMaterialBalances(balancesResponse.balances),
     source: 'chain-db',
     syncedAt: new Date().toISOString(),
     chain: {
@@ -220,7 +216,10 @@ export async function getTransactions(wallet: string) {
 }
 
 function getConfiguredMaterialIds() {
-  return materialDefinitions.map((material) => contentMaterialIdToChainId(material.id))
+  return uniqueValues([
+    ...materialDefinitions.map((material) => contentMaterialIdToChainId(material.id)),
+    '1',
+  ])
 }
 
 function contentMaterialIdToChainId(materialId: string) {
@@ -230,11 +229,35 @@ function contentMaterialIdToChainId(materialId: string) {
     return materialId
   }
 
-  return match[1]
+  return match[1] ?? materialId
 }
 
 function chainMaterialIdToContentId(materialId: string) {
+  if (materialId === '1') {
+    return 'MAT-2C'
+  }
+
   return materialDefinitions.find((material) => contentMaterialIdToChainId(material.id) === materialId)?.id ?? materialId
+}
+
+function mergeMaterialBalances(balances: WalletMaterialsResponse['balances']) {
+  const amountByMaterialId = new Map<string, number>()
+  const updatedAt = new Date().toISOString()
+
+  for (const balance of balances) {
+    const materialId = chainMaterialIdToContentId(balance.materialId)
+    amountByMaterialId.set(materialId, (amountByMaterialId.get(materialId) ?? 0) + Number(balance.amount))
+  }
+
+  return [...amountByMaterialId].map(([materialId, amount]) => ({
+    materialId,
+    amount,
+    updatedAt,
+  }))
+}
+
+function uniqueValues(values: string[]) {
+  return [...new Set(values)]
 }
 
 function decimalEthToWei(value: number) {

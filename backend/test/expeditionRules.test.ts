@@ -27,9 +27,9 @@ describe('expedition rules', () => {
   })
 
   it('maps expedition type to material id', () => {
-    expect(materialIdForForest('orange')).toBe('1')
-    expect(materialIdForForest('apple')).toBe('1')
-    expect(materialIdForForest('snow-peach')).toBe('2')
+    expect(materialIdForForest('orange')).toBe('2')
+    expect(materialIdForForest('apple')).toBe('2')
+    expect(materialIdForForest('snow-peach')).toBe('4')
   })
 
   it('temporary level penalty affects later event rolls only', () => {
@@ -80,9 +80,10 @@ describe('expedition rules', () => {
     })
 
     expect(outcome.events[0].success).toBe(true)
-    expect(outcome.events[0].materialId).toBe('1')
+    expect(outcome.events[0].materialId).toBe('2')
     expect(outcome.events[0].materialAmount).toBe(3)
-    expect(outcome.reward.materials).toEqual([{ id: '1', count: 3 }])
+    expect(outcome.reward.materials).toEqual([{ id: '2', count: 3 }])
+    expect(outcome.reward.exp).toBe(100)
   })
 
   it('failed events give no material', () => {
@@ -107,6 +108,7 @@ describe('expedition rules', () => {
     expect(outcome.events[0].materialId).toBeNull()
     expect(outcome.events[0].materialAmount).toBe(0)
     expect(outcome.reward.materials).toEqual([])
+    expect(outcome.reward.exp).toBe(0)
   })
 })
 

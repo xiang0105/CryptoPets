@@ -26,7 +26,7 @@ const baseConfig: AppConfig = {
 }
 
 describe('ExpeditionService', () => {
-  it('starts expedition and stores pet snapshot with logs', async () => {
+  it('starts expedition and only exposes logs that have happened', async () => {
     const wallet = Wallet.createRandom()
     const context = createServiceContext({
       expeditionId: 'expedition-start',
@@ -43,8 +43,19 @@ describe('ExpeditionService', () => {
     expect(expedition.totalLevel).toBe(7)
     expect(expedition.sumIv).toBe(300)
     expect(expedition.petIds).toEqual(['1', '2'])
-    expect(expedition.logs.length).toBeGreaterThan(0)
+    expect(expedition.logs).toHaveLength(1)
+    expect(expedition.logs[0].message.en).toBe('Started Orange Forest.')
     expect(context.store.getActiveExpedition(wallet.address)?.id).toBe('expedition-start')
+
+    context.now = new Date(Date.parse(expedition.endsAt) - 1)
+    const progressLogs = context.service.getExpeditionLogs(wallet.address)
+    expect(progressLogs.length).toBeGreaterThan(1)
+    expect(progressLogs.at(-1)?.message.en).not.toBe('The expedition is complete and waiting to be claimed.')
+
+    context.now = new Date(Date.parse(expedition.endsAt))
+    expect(context.service.getExpeditionLogs(wallet.address).at(-1)?.message.en).toBe(
+      'The expedition is complete and waiting to be claimed.'
+    )
 
     context.store.close()
   })
@@ -142,11 +153,60 @@ describe('ExpeditionService', () => {
     expect(context.chain.materialCalls.length).toBe(1)
     expect(context.chain.materialCalls[0].functionName).toBe('increaseMaterial')
     expect(context.chain.materialCalls[0].confirmations).toBe(1)
-    expect(String(context.chain.materialCalls[0].args[1])).toBe('1')
+    expect(String(context.chain.materialCalls[0].args[1])).toBe('2')
     expect(String(context.chain.materialCalls[0].args[2])).toBe(String(expectedCount))
     expect(claimed.status).toBe('claimed')
     expect(claimed.materialMintTxHash).toBe('0xmaterial')
     expect(context.store.getActiveExpedition(wallet.address)).toBeNull()
+
+    context.store.close()
+  })
+
+  it('claims the stored expedition result instead of recalculating from changed team stats', async () => {
+    const wallet = Wallet.createRandom()
+    const expeditionId = findExpeditionId('orange', 1, 0, (rewardCount) => rewardCount > 0)
+    const context = createServiceContext({
+      expeditionId,
+      pets: [
+        pet('1', wallet.address, 'Orange', '1', 0)
+      ]
+    })
+    const expedition = await signedStart(context.service, wallet, ['1'], 'orange')
+    const expectedRewardCount = expedition.events.reduce((sum, event) => sum + event.materialAmount, 0)
+
+    context.chain.setPet(pet('1', wallet.address, 'Orange', '100', 450))
+    context.now = new Date(Date.parse(expedition.endsAt) + 1000)
+
+    const claimed = await signedClaim(context.service, wallet, expedition.id)
+
+    expect(claimed.reward?.materials.reduce((sum, material) => sum + material.count, 0)).toBe(expectedRewardCount)
+    expect(String(context.chain.materialCalls[0]?.args[2])).toBe(String(expectedRewardCount))
+
+    context.store.close()
+  })
+
+  it('levels expedition pets when claiming earned experience', async () => {
+    const wallet = Wallet.createRandom()
+    const expeditionId = findExpeditionId('orange', 5, 450, (rewardCount, exp) => rewardCount > 0 && exp > 0)
+    const context = createServiceContext({
+      expeditionId,
+      pets: [
+        pet('1', wallet.address, 'Orange', '2', 225),
+        pet('2', wallet.address, 'Apple', '3', 225)
+      ]
+    })
+    const expedition = await signedStart(context.service, wallet, ['1', '2'], 'orange')
+
+    context.now = new Date(Date.parse(expedition.endsAt) + 1000)
+
+    const claimed = await signedClaim(context.service, wallet, expedition.id)
+    const levelGain = Math.floor((claimed.reward?.exp ?? 0) / 100)
+
+    expect(claimed.reward?.exp).toBeGreaterThan(0)
+    expect(context.chain.petCalls).toEqual([
+      { functionName: 'setPetLevel', args: [1n, BigInt(2 + levelGain)], confirmations: 1 },
+      { functionName: 'setPetLevel', args: [2n, BigInt(3 + levelGain)], confirmations: 1 }
+    ])
 
     context.store.close()
   })
@@ -176,6 +236,11 @@ describe('ExpeditionService', () => {
 })
 
 class FakeChain implements ExpeditionChainService {
+  petCalls: Array<{
+    functionName: string
+    args: unknown[]
+    confirmations: number | undefined
+  }> = []
   materialCalls: Array<{
     functionName: string
     args: unknown[]
@@ -206,6 +271,18 @@ class FakeChain implements ExpeditionChainService {
 
     return {
       hash: '0xmaterial'
+    }
+  }
+
+  setPet(pet: ChainExpeditionPet) {
+    this.pets.set(pet.tokenId, pet)
+  }
+
+  async sendPetAdminTxAndWait(functionName: string, args: unknown[], confirmations?: number) {
+    this.petCalls.push({ functionName, args, confirmations })
+
+    return {
+      hash: '0xpet'
     }
   }
 }
@@ -290,7 +367,7 @@ function findExpeditionId(
   expeditionType: ExpeditionType,
   totalLevel: number,
   sumIv: number,
-  match: (rewardCount: number) => boolean
+  match: (rewardCount: number, exp: number) => boolean
 ) {
   const forest = expeditionForestById.get(expeditionType)
 
@@ -308,7 +385,7 @@ function findExpeditionId(
     })
     const rewardCount = outcome.reward.materials.reduce((sum, material) => sum + material.count, 0)
 
-    if (match(rewardCount)) {
+    if (match(rewardCount, outcome.reward.exp)) {
       return expeditionId
     }
   }

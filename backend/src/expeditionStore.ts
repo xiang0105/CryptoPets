@@ -454,6 +454,7 @@ export class ExpeditionStore {
       reward: record.reward,
       totalLevel: record.totalLevel,
       sumIv: record.sumIv,
+      petSnapshot: record.petSnapshot,
       events: record.events,
       logs: this.listLogsByExpedition(record.id),
       materialMintTxHash: record.materialMintTxHash

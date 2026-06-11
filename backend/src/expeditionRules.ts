@@ -3,6 +3,7 @@ import type { ExpeditionForest, StoryBeat, StoryOutcome } from './expeditionCont
 import type { ExpeditionEventResult, ExpeditionReward } from './expeditionTypes.js'
 
 const penaltyTags = new Set(['damage-display', 'poison', 'slow', 'stun'])
+export const expPerSuccessfulEvent = 100
 
 export function successChance(totalLevel: number, difficulty: number) {
   return clamp(30 + totalLevel * 8 - difficulty * 10, 10, 95)
@@ -10,10 +11,10 @@ export function successChance(totalLevel: number, difficulty: number) {
 
 export function materialIdForForest(forestId: string) {
   if (forestId === 'snow-peach') {
-    return '2'
+    return '4'
   }
 
-  return '1'
+  return '2'
 }
 
 export function materialAmountPerSuccessfulEvent(sumIv: number) {
@@ -75,11 +76,30 @@ export function calculateExpeditionOutcome(input: {
 
   return {
     events,
-    reward: {
-      exp: 0,
-      sepoliaAmount: '0',
-      materials: successfulEvents > 0 ? [{ id: materialId, count: successfulEvents * materialAmount }] : []
+    reward: buildRewardFromEvents(events)
+  }
+}
+
+export function buildRewardFromEvents(events: ExpeditionEventResult[]): ExpeditionReward {
+  const materialsById = new Map<string, number>()
+  let successfulEvents = 0
+
+  for (const event of events) {
+    if (!event.success) {
+      continue
     }
+
+    successfulEvents += 1
+
+    if (event.materialId && event.materialAmount > 0) {
+      materialsById.set(event.materialId, (materialsById.get(event.materialId) ?? 0) + event.materialAmount)
+    }
+  }
+
+  return {
+    exp: successfulEvents * expPerSuccessfulEvent,
+    sepoliaAmount: '0',
+    materials: [...materialsById].map(([id, count]) => ({ id, count }))
   }
 }
 

@@ -543,7 +543,7 @@ Request：
 
 ## 遠征 API
 
-遠征完全在後端執行，不修改 Solidity 合約的 pet 狀態。只有 claim 成功且素材數量大於 0 時，後端會呼叫 `CryptoMaterials.increaseMaterial(wallet, materialId, amount)` 發放鏈上素材，並等待 1 confirmation 後才標記 claimed。
+遠征在後端執行。claim 成功時，後端會先把本趟獲得的 EXP 轉成角色等級並呼叫 `CryptoPets.setPetLevel(tokenId, level)` 寫回出戰角色，再依獎勵發放鏈上素材；相關鏈上交易都等待 1 confirmation 後才標記 claimed。
 
 ### 遠征簽名流程
 
@@ -566,10 +566,14 @@ Request：
 - `roll < chance` 表示成功。
 - 失敗事件若 outcome tags 包含 `damage-display`、`poison`、`slow`、`stun`，後續事件的 `effectiveTotalLevel -= 1`，最小為 `0`。
 - 暫時 level penalty 只影響本趟遠征事件判定，不寫回 pet。
+- 遠征事件 log 會依 `occurred_at` 顯示；尚未發生的事件與結束 log 不會提前回傳給玩家。
+- claim 使用開始遠征時已保存的事件結果結算，不會重新計算遠征成敗。
+- 每個成功事件給 100 EXP。
+- claim 時每滿 100 EXP，出戰角色各提升 1 level。
 - 只有成功事件會給素材。
 - 每個成功事件素材量：`1 + floor(sumIv / 200)`。
-- `orange` 與 `apple` 發 `materialId "1"`。
-- `snow-peach` 發 `materialId "2"`。
+- `orange` 與 `apple` 發 `materialId "2"`，對應前端素材 `MAT-2C`。
+- `snow-peach` 發 `materialId "4"`，對應前端素材 `MAT-4B`。
 
 ### `POST /auth/nonce`
 
@@ -694,7 +698,7 @@ Response：
   "endsAt": "2026-01-01T00:00:45.000Z",
   "status": "claimed",
   "reward": {
-    "exp": 0,
+    "exp": 300,
     "sepoliaAmount": "0",
     "materials": [
       {

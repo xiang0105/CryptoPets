@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { expeditionForestById, type ExpeditionForest } from './expeditionContent.js'
-import { calculateExpeditionOutcome } from './expeditionRules.js'
+import { buildRewardFromEvents, calculateExpeditionOutcome } from './expeditionRules.js'
 import type { ExpeditionStore } from './expeditionStore.js'
 import type {
   ChainExpeditionPet,
@@ -18,8 +18,11 @@ import { readAddress, readBody, readString, readUint } from './validation.js'
 
 export interface ExpeditionChainService {
   getPet(tokenId: bigint): Promise<ChainExpeditionPet>
+  sendPetAdminTxAndWait(functionName: string, args: unknown[], confirmations?: number): Promise<{ hash: string }>
   sendMaterialAdminTxAndWait(functionName: string, args: unknown[], confirmations?: number): Promise<{ hash: string }>
 }
+
+const expPerLevel = 100
 
 export class ExpeditionService {
   constructor(
@@ -105,7 +108,7 @@ export class ExpeditionService {
       throw new Error('Created expedition could not be loaded')
     }
 
-    return details
+    return this.withVisibleLogs(details)
   }
 
   async claimReward(body: unknown): Promise<ExpeditionDetails> {
@@ -139,28 +142,18 @@ export class ExpeditionService {
       throw new HttpError(409, 'EXPEDITION_NOT_READY', 'Expedition has not ended')
     }
 
-    const forest = expeditionForestById.get(expedition.expeditionType)
-
-    if (!forest) {
-      throw invalidRequest('expeditionType is unknown')
-    }
-
-    const outcome = calculateExpeditionOutcome({
-      expeditionId: expedition.id,
-      forest,
-      totalLevel: expedition.totalLevel,
-      sumIv: expedition.sumIv
-    })
-    const materialMintTxHash = await this.mintRewardMaterials(wallet, outcome.reward)
+    const reward = buildRewardFromEvents(expedition.events)
+    await this.levelRewardPets(expedition.petSnapshot, reward)
+    const materialMintTxHash = await this.mintRewardMaterials(wallet, reward)
     const claimedAt = this.now().toISOString()
 
     this.store.markClaimed({
       expeditionId: expedition.id,
       claimedAt,
-      reward: outcome.reward,
+      reward,
       materialMintTxHash
     })
-    this.store.addLog(wallet, buildClaimLog(expedition.id, claimedAt, outcome.reward, materialMintTxHash))
+    this.store.addLog(wallet, buildClaimLog(expedition.id, claimedAt, reward, materialMintTxHash))
 
     const claimed = this.store.getExpedition(expedition.id)
 
@@ -169,21 +162,21 @@ export class ExpeditionService {
     }
 
     return {
-      ...claimed,
-      events: outcome.events,
-      reward: outcome.reward,
+      ...this.withVisibleLogs(claimed),
+      reward,
       materialMintTxHash
     }
   }
 
   getActiveExpedition(walletInput: unknown) {
     const wallet = readAddress(walletInput, 'wallet')
-    return this.store.getActiveExpedition(wallet)
+    const expedition = this.store.getActiveExpedition(wallet)
+    return expedition ? this.withVisibleLogs(expedition) : null
   }
 
   getExpeditionLogs(walletInput: unknown) {
     const wallet = readAddress(walletInput, 'wallet')
-    return this.store.listLogs(wallet)
+    return this.visibleLogs(this.store.listLogs(wallet))
   }
 
   private async readPetSnapshot(wallet: string, petIds: string[]): Promise<ExpeditionPetSnapshot[]> {
@@ -225,6 +218,34 @@ export class ExpeditionService {
     }
 
     return lastTxHash
+  }
+
+  private async levelRewardPets(pets: ExpeditionPetSnapshot[], reward: ExpeditionReward) {
+    const levelGain = Math.floor(reward.exp / expPerLevel)
+
+    if (levelGain <= 0) {
+      return
+    }
+
+    for (const pet of pets) {
+      await this.chain.sendPetAdminTxAndWait(
+        'setPetLevel',
+        [BigInt(pet.tokenId), BigInt(pet.level + levelGain)],
+        1
+      )
+    }
+  }
+
+  private withVisibleLogs(details: ExpeditionDetails): ExpeditionDetails {
+    return {
+      ...details,
+      logs: this.visibleLogs(details.logs)
+    }
+  }
+
+  private visibleLogs(logs: ExpeditionLogEntry[]) {
+    const now = this.now().getTime()
+    return logs.filter((log) => Date.parse(log.at) <= now)
   }
 }
 

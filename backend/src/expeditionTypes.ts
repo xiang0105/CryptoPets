@@ -79,6 +79,7 @@ export interface ExpeditionDetails extends ExpeditionSummary {
   wallet: string
   totalLevel: number
   sumIv: number
+  petSnapshot: ExpeditionPetSnapshot[]
   events: ExpeditionEventResult[]
   logs: ExpeditionLogEntry[]
   materialMintTxHash: string | null
