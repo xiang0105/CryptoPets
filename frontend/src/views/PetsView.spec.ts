@@ -51,7 +51,7 @@ const testPets: Pet[] = [
   {
     id: 'pet-1',
     tokenId: '7',
-    name: 'Capy-san',
+    name: 'sakikojin',
     element: 'ember',
     stage: 1,
     level: 1,
@@ -59,7 +59,7 @@ const testPets: Pet[] = [
     basePetId: 'TEST-PET-001',
     skinId: 0,
     stats: { iv: 80, hp: 100, maxHp: 100, atk: 75, def: 60 },
-    profile: { zh: 'Capy-san profile', en: 'Capy-san profile' },
+    profile: { zh: 'sakikojin profile', en: 'sakikojin profile' },
     leaderSkill: {
       id: 'leader-citrus',
       name: { zh: 'Citrus Lead', en: 'Citrus Lead' },
@@ -79,7 +79,7 @@ const testPets: Pet[] = [
   {
     id: 'pet-2',
     tokenId: '8',
-    name: 'Bobo',
+    name: 'worrior',
     element: 'frost',
     stage: 2,
     level: 4,
@@ -173,13 +173,13 @@ describe('PetsView', () => {
     await flushPromises()
 
     const emptyTeamSlot = wrapper.findAll('button.team-slot').find((button) => button.text().includes('+'))
-    const boboTile = wrapper.findAll('button.pet-tile').find((button) => button.text().includes('Bobo'))
+    const worriorTile = wrapper.findAll('button.pet-tile').find((button) => button.text().includes('worrior'))
 
     expect(emptyTeamSlot).toBeTruthy()
-    expect(boboTile).toBeTruthy()
+    expect(worriorTile).toBeTruthy()
 
     await emptyTeamSlot!.trigger('click')
-    await boboTile!.trigger('click')
+    await worriorTile!.trigger('click')
 
     expect(expeditionTeamIds.value).toEqual(['pet-2'])
     expect(wrapper.text()).toContain('1 / 4')

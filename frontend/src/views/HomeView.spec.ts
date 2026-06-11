@@ -66,7 +66,7 @@ const testPets: Pet[] = [
   {
     id: 'pet-1',
     tokenId: '7',
-    name: 'Capy-san',
+    name: 'sakikojin',
     element: 'ember',
     stage: 1,
     level: 1,

@@ -61,7 +61,7 @@ Material ERC-1155：
 
 ## 命名規則
 
-- Pet slug 使用 `kebab-case`，例如 `capy-san`。
+- Pet slug 使用 `kebab-case`，例如 `sakikojin`。
 - Material slug 使用 `kebab-case`，例如 `yuzu-bite`。
 - Material ID 使用 `MAT-{element}{grade}`，例如 `MAT-2C`。
 - 測試期 Pet game id 可使用 `TEST-PET-001`。
