@@ -592,7 +592,7 @@ button:disabled {
 }
 
 .pet-grid {
-  max-height: calc(100% - 370px);
+  max-height: calc(100% - 300px);
   padding: 0 14px 12px 10px;
   overflow-y: auto;
   scrollbar-color: #9a5a2c rgba(255, 255, 255, 0.28);
