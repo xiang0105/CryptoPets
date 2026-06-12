@@ -1,4 +1,26 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3400'
+const getApiBaseUrl = () => {
+  const envUrl = import.meta.env.VITE_API_BASE_URL
+  if (envUrl && envUrl.trim() !== '') {
+    return envUrl
+  }
+
+  if (typeof window !== 'undefined' && window.location) {
+    const { hostname, protocol } = window.location
+    const isLocal = hostname === 'localhost' ||
+                    hostname === '127.0.0.1' ||
+                    /^192\.168\.\d+\.\d+$/.test(hostname) ||
+                    /^10\.\d+\.\d+\.\d+$/.test(hostname) ||
+                    /^172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+$/.test(hostname)
+
+    if (isLocal) {
+      return `${protocol}//${hostname}:3400`
+    }
+  }
+
+  return 'https://cryptopets-api.onrender.com'
+}
+
+const API_BASE_URL = getApiBaseUrl()
 const AUTH_TOKEN_KEY = 'cryptopets.authToken'
 
 export function getAuthToken() {

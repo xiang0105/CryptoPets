@@ -58,7 +58,7 @@ frontend/
 請參考 `frontend/.env.example` 建立 `frontend/.env`。如果要跑完整串接測試，可以改填 `frontend/.env.e2e`，並且只使用測試 Supabase 專案、測試鏈與測試合約資訊。
 
 ```text
-VITE_API_BASE_URL=http://localhost:3400
+VITE_API_BASE_URL=https://cryptopets-api.onrender.com
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-public-anon-key
 VITE_CHAIN_ID=1
@@ -70,7 +70,7 @@ VITE_MATERIAL_CONTRACT_ADDRESS=0x0000000000000000000000000000000000000000
 
 | 變數 | 用途 | 取得方式 |
 | --- | --- | --- |
-| `VITE_API_BASE_URL` | 後端 API base URL。 | 本機通常填 `http://localhost:3400` 或 `http://127.0.0.1:3400`；部署後填後端服務網址。 |
+| `VITE_API_BASE_URL` | 後端 API base URL。 | 預設指向公開後端 `https://cryptopets-api.onrender.com`；若要本機開發可改成 `http://localhost:3400`。 |
 | `VITE_SUPABASE_URL` | Supabase 專案 URL。 | 到 Supabase 專案的 Project Settings > API 複製 Project URL。 |
 | `VITE_SUPABASE_ANON_KEY` | Supabase 前端公開 anon key。 | 到 Supabase 專案的 Project Settings > API 複製 anon public key。不要填 service_role key。 |
 | `VITE_CHAIN_ID` | 前端檢查錢包所在鏈。 | 依測試鏈或正式鏈填入 chain id，例如 Ethereum mainnet 是 `1`。 |

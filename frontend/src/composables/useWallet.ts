@@ -72,6 +72,21 @@ function getWalletErrorMessage(error: unknown, fallback: string) {
       : 'Request rejected in MetaMask. Please approve the wallet prompt to continue.'
   }
 
+  if (error instanceof Error) {
+    const isCustomMessage = [
+      walletText('missing'),
+      walletText('noAccount'),
+      walletText('accountChanged'),
+      walletText('disconnected'),
+      walletText('networkChanged'),
+      walletText('unsupportedNetwork'),
+    ].includes(error.message)
+
+    if (isCustomMessage) {
+      return error.message
+    }
+  }
+
   if (locale.value === 'zh-TW') {
     return fallback
   }

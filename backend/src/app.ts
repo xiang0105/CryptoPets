@@ -83,7 +83,23 @@ export function createApp(
   const corsOrigins = config.corsOrigins ?? [config.corsOrigin]
 
   app.use(helmet())
-  app.use(cors({ origin: corsOrigins }))
+  app.use(cors({
+    origin: (origin, callback) => {
+      if (!origin || corsOrigins.includes(origin)) {
+        callback(null, true)
+        return
+      }
+
+      // Allow local network origins in development/non-production
+      const isLocalNetwork = /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+)(:\d+)?$/.test(origin)
+      if (process.env.NODE_ENV !== 'production' && isLocalNetwork) {
+        callback(null, true)
+        return
+      }
+
+      callback(null, false)
+    }
+  }))
   app.use(express.json())
 
   app.use((_request, response, next) => {

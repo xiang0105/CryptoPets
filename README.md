@@ -80,7 +80,7 @@ npm run type-check
 
 | 變數 | 放置位置 | 取得方式 |
 | --- | --- | --- |
-| `VITE_API_BASE_URL` | 前端 | 後端 API 的網址。本機預設是 `http://localhost:3400`。 |
+| `VITE_API_BASE_URL` | 前端 | 後端 API 的網址。預設指向公開後端 `https://cryptopets-api.onrender.com`。 |
 | `VITE_SUPABASE_URL` / `SUPABASE_URL` | 前端、後端 | 到 Supabase 專案的 Project Settings > API 複製 Project URL。 |
 | `VITE_SUPABASE_ANON_KEY` | 前端 | 到 Supabase 專案的 Project Settings > API 複製 anon public key。這是公開 key，可放前端。 |
 | `SUPABASE_SERVICE_ROLE_KEY` | 後端 | 到 Supabase 專案的 Project Settings > API 複製 service_role key。這是高權限密鑰，只能放後端測試或伺服器環境。 |
