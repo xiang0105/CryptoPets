@@ -91,11 +91,12 @@ describe('backend app', () => {
     expect(response.body.error).toBe('INVALID_REQUEST')
   })
 
-  it('creates database material listings and marks purchases pending without chain transactions', async () => {
+  it('creates database material listings and completes purchases with material transfer transactions', async () => {
     const store = new ExpeditionStore(':memory:')
     const sellerWallet = '0x86d892de0CF9256401df49Aa08d51d0bC75A106d'
     const buyerWallet = '0xD8b6b7d402DDC69788f51eD613c3c3e9dDDCAB7e'
-    const app = createApp(baseConfig, createMaterialBalanceServices({ '2': '10' }), undefined, undefined, store)
+    const materialAdminCalls: Array<{ functionName: string; args: unknown[]; confirmations?: number }> = []
+    const app = createApp(baseConfig, createMaterialBalanceServices({ '2': '10' }, materialAdminCalls), undefined, undefined, store)
 
     try {
       const createResponse = await request(app, 'POST', '/market/materials', {
@@ -122,16 +123,21 @@ describe('backend app', () => {
 
       const listingId = createResponse.body.listing.id as string
       const buyResponse = await request(app, 'POST', `/market/materials/${listingId}/buy`, {
-        buyerWallet
+        buyerWallet,
+        paymentTxHash: '0xbuy'
       })
 
       expect(buyResponse.status).toBe(200)
-      expect(buyResponse.body.listing.status).toBe('pending')
+      expect(buyResponse.body.listing.status).toBe('sold')
       expect(buyResponse.body.listing.buyerId).toBe(buyerWallet)
-      expect(store.getReservedMaterialAmounts(sellerWallet)).toEqual({ 'MAT-2C': 2 })
+      expect(store.getReservedMaterialAmounts(sellerWallet)).toEqual({})
+      expect(materialAdminCalls).toEqual([
+        { functionName: 'decreaseMaterial', args: [sellerWallet, 2n, 2n], confirmations: 1 },
+        { functionName: 'increaseMaterial', args: [buyerWallet, 2n, 2n], confirmations: 1 }
+      ])
 
       const marketResponse = await request(app, 'GET', '/market/materials')
-      expect(marketResponse.body.listings).toEqual([buyResponse.body.listing])
+      expect(marketResponse.body.listings).toEqual([])
 
       const buyerTransactions = await request(app, 'GET', `/wallets/${buyerWallet}/transactions`)
       expect(buyerTransactions.body.transactions).toEqual([
@@ -139,7 +145,7 @@ describe('backend app', () => {
           action: 'buy',
           materialId: 'MAT-2C',
           materialAmount: 2,
-          sepoliaAmount: '0'
+          sepoliaAmount: '-0.25'
         })
       ])
     } finally {
@@ -160,7 +166,8 @@ describe('backend app', () => {
         price: 0.00000000001
       })
       const buyResponse = await request(app, 'POST', `/market/materials/${createResponse.body.listing.id}/buy`, {
-        buyerWallet: sellerWallet
+        buyerWallet: sellerWallet,
+        paymentTxHash: '0xbuy'
       })
 
       expect(createResponse.status).toBe(200)
@@ -271,7 +278,10 @@ describe('backend app', () => {
   })
 })
 
-function createMaterialBalanceServices(amountsByMaterialId: Record<string, string>): BackendServices {
+function createMaterialBalanceServices(
+  amountsByMaterialId: Record<string, string>,
+  materialAdminCalls: Array<{ functionName: string; args: unknown[]; confirmations?: number }> = []
+): BackendServices {
   return {
     getContracts: () => ({
       chainId: baseConfig.chainId,
@@ -297,7 +307,11 @@ function createMaterialBalanceServices(amountsByMaterialId: Record<string, strin
     buildPetTx: () => ({ to: '', data: '0x', value: '0', chainId: baseConfig.chainId }),
     buildMaterialTx: () => ({ to: '', data: '0x', value: '0', chainId: baseConfig.chainId }),
     sendPetAdminTx: async () => ({ hash: '' }),
-    sendMaterialAdminTx: async () => ({ hash: '' })
+    sendMaterialAdminTx: async () => ({ hash: '' }),
+    sendMaterialAdminTxAndWait: async (functionName, args, confirmations) => {
+      materialAdminCalls.push({ functionName, args, confirmations })
+      return { hash: '' }
+    }
   }
 }
 

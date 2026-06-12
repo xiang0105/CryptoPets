@@ -13,6 +13,7 @@ import {
   readBody,
   readBoolean,
   readHexData,
+  readOptionalString,
   readString,
   readUintArray,
   readUintFromBody,
@@ -36,6 +37,7 @@ export interface BackendServices {
   buildMaterialTx(functionName: string, args: unknown[], value?: bigint): TransactionRequestDto
   sendPetAdminTx(functionName: string, args: unknown[]): Promise<SentTransactionDto>
   sendMaterialAdminTx(functionName: string, args: unknown[]): Promise<SentTransactionDto>
+  sendMaterialAdminTxAndWait(functionName: string, args: unknown[], confirmations?: number): Promise<SentTransactionDto>
 }
 
 export interface ExpeditionApiServices {
@@ -64,7 +66,7 @@ export interface DbMarketApiServices {
   getReservedMaterialAmounts(wallet: string): Record<string, number>
   listMarketListings(): MarketListing[]
   cancelMarketListing(input: { listingId: string; sellerWallet: string; now: string }): MarketListing | null
-  markMarketListingPending(input: { listingId: string; buyerWallet: string; now: string }): MarketListing | null
+  completeMarketPurchase(input: { listingId: string; buyerWallet: string; now: string }): MarketListing | null
   listPlayerTransactions(wallet: string): PlayerTransaction[]
 }
 
@@ -235,11 +237,12 @@ export function createApp(
     response.json({ listing })
   })
 
-  app.post('/market/materials/:listingId/buy', (request, response) => {
+  app.post('/market/materials/:listingId/buy', asyncRoute(async (request, response) => {
     const market = requireDbMarketService(dbMarketServices)
     const listingId = readString(request.params as Record<string, unknown>, 'listingId')
     const body = readBody(request.body)
     const buyerWallet = readAddress(body.buyerWallet, 'buyerWallet')
+    const paymentTxHash = readOptionalString(body, 'paymentTxHash')
     const existing = market.getMarketListing(listingId)
 
     if (!existing || existing.status !== 'active') {
@@ -250,7 +253,15 @@ export function createApp(
       throw conflict('CANNOT_BUY_OWN_LISTING', 'You cannot buy your own market listing')
     }
 
-    const listing = market.markMarketListingPending({
+    if (!paymentTxHash) {
+      throw invalidRequest('paymentTxHash is required')
+    }
+
+    const chainMaterialId = BigInt(contentMaterialIdToChainId(existing.materialId))
+    await services.sendMaterialAdminTxAndWait('decreaseMaterial', [existing.sellerWallet, chainMaterialId, BigInt(existing.amount)], 1)
+    await services.sendMaterialAdminTxAndWait('increaseMaterial', [buyerWallet, chainMaterialId, BigInt(existing.amount)], 1)
+
+    const listing = market.completeMarketPurchase({
       listingId,
       buyerWallet,
       now: new Date().toISOString()
@@ -261,7 +272,7 @@ export function createApp(
     }
 
     response.json({ listing })
-  })
+  }))
 
   app.get('/wallets/:wallet/transactions', (request, response) => {
     const market = requireDbMarketService(dbMarketServices)

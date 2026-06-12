@@ -461,6 +461,25 @@ Request：
 }
 ```
 
+### DB 市場購買流程
+
+`POST /market/materials/:listingId/buy` 用於目前的資料庫市場。前端會先讓買家錢包送出付款給賣家，取得 `paymentTxHash` 後才呼叫此端點。
+
+Request：
+
+```json
+{
+  "buyerWallet": "0x...",
+  "paymentTxHash": "0x..."
+}
+```
+
+成功後：
+
+- 掛單狀態改為 `sold`，不再出現在市場。
+- 後端送出素材管理交易：先從賣家扣素材，再增加到買家。
+- 買家與賣家近期交易分別記錄 `buy` / `sell`。
+
 ## Admin API
 
 所有 admin API 都需要 header：

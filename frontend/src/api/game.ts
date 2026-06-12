@@ -203,10 +203,27 @@ export async function cancelMarketListing(wallet: string, listingId: string) {
 
 export async function buyMarketListing(wallet: string, listingId: string) {
   const payload: ListingIdRequest = { listingId }
+  const [contracts, listingResponse] = await Promise.all([
+    apiRequest<ContractsResponse>('/contracts'),
+    apiRequest<MaterialListingResponse>(`/market/materials/${payload.listingId}`),
+  ])
+  const listing = listingResponse.listing
+
+  if (!listing.sellerWallet) {
+    throw new Error('MARKET_LISTING_NOT_FOUND')
+  }
+
+  const paymentTxHash = await sendWalletTransaction({
+    to: listing.sellerWallet,
+    data: '0x',
+    value: decimalEthToWei(listing.price),
+    chainId: contracts.chainId || fallbackChainId,
+  })
   const response = await apiRequest<MaterialListingResponse>(`/market/materials/${payload.listingId}/buy`, {
     method: 'POST',
     body: JSON.stringify({
       buyerWallet: wallet,
+      paymentTxHash,
     }),
   })
 
@@ -265,7 +282,8 @@ function uniqueValues(values: string[]) {
 }
 
 function decimalEthToWei(value: number) {
-  const [whole, fractional = ''] = String(value).split('.')
+  const decimal = Number.isFinite(value) ? value.toFixed(18) : String(value)
+  const [whole, fractional = ''] = decimal.split('.')
   const wei = `${whole || '0'}${fractional.padEnd(18, '0').slice(0, 18)}`.replace(/^0+(?=\d)/, '')
   return wei || '0'
 }

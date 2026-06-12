@@ -257,7 +257,7 @@ export class ExpeditionStore {
     return this.getMarketListing(input.listingId)
   }
 
-  markMarketListingPending(input: { listingId: string; buyerWallet: string; now: string }): MarketListing | null {
+  completeMarketPurchase(input: { listingId: string; buyerWallet: string; now: string }): MarketListing | null {
     const existing = this.getMarketListing(input.listingId)
 
     if (!existing || existing.status !== 'active' || existing.sellerWallet?.toLowerCase() === input.buyerWallet.toLowerCase()) {
@@ -269,7 +269,7 @@ export class ExpeditionStore {
       action: 'buy',
       materialId: existing.materialId,
       materialAmount: existing.amount,
-      sepoliaAmount: '0',
+      sepoliaAmount: `-${existing.price}`,
       createdAt: input.now
     }
     const sellTransaction: PlayerTransaction = {
@@ -277,7 +277,7 @@ export class ExpeditionStore {
       action: 'sell',
       materialId: existing.materialId,
       materialAmount: existing.amount,
-      sepoliaAmount: '0',
+      sepoliaAmount: `${existing.price}`,
       createdAt: input.now
     }
 
@@ -288,7 +288,7 @@ export class ExpeditionStore {
     const transactionRunner = this.db.transaction(() => {
       this.db.prepare(`
         update market_material_listings
-        set status = 'pending', buyer_id = ?, updated_at = ?
+        set status = 'sold', buyer_id = ?, updated_at = ?
         where id = ? and status = 'active'
       `).run(input.buyerWallet, input.now, input.listingId)
       insertTransaction.run({

@@ -203,7 +203,7 @@ async function buyGoodie(goodie: GoodieSft) {
   try {
     await requestBuyListing(goodie.id)
     const name = displayName(goodie)
-    storeNotice.value = isZh.value ? `已建立待處理購買：${name}` : `Purchase pending: ${name}`
+    storeNotice.value = isZh.value ? `購買完成：${name}` : `Purchase complete: ${name}`
   } catch {
     storeNotice.value = operationError.buyListing
   }

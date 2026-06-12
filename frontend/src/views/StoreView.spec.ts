@@ -161,7 +161,7 @@ describe('StoreView', () => {
     await flushPromises()
 
     expect(requestBuyListing).toHaveBeenCalledWith('listing-1')
-    expect(wrapper.text()).toContain('Purchase pending: Yuzu Bite')
+    expect(wrapper.text()).toContain('Purchase complete: Yuzu Bite')
   })
 
   it('keeps store listing entry disabled because selling is handled by inventory', async () => {
