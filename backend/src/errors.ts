@@ -32,6 +32,7 @@ export function asyncRoute(handler: (request: Request, response: Response) => Pr
 }
 
 export function errorHandler(error: unknown, _request: Request, response: Response, _next: NextFunction) {
+  console.error('Backend API Error:', error)
   if (error instanceof HttpError) {
     response.status(error.status).json({ error: error.code, message: error.message })
     return

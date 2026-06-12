@@ -107,6 +107,7 @@ const zhApiErrorMessages: Record<string, string> = {
 }
 
 export function translateApiError(error: unknown, fallback: string) {
+  console.error('Frontend API Error:', error)
   const code = error instanceof Error ? error.message : ''
   const messages = locale.value === 'zh-TW' ? zhApiErrorMessages : apiErrorMessages
 

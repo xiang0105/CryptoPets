@@ -85,6 +85,11 @@ export function createApp(
   app.use(cors({ origin: config.corsOrigin }))
   app.use(express.json())
 
+  app.use((_request, response, next) => {
+    response.set('Cache-Control', 'no-store, no-cache, must-revalidate, private')
+    next()
+  })
+
   app.get('/health', (_request, response) => {
     response.json({ status: 'ok' })
   })
@@ -271,7 +276,7 @@ export function createApp(
       throw invalidRequest('paymentTxHash must transfer the full listing price to the seller')
     }
 
-    const expectedValue = parseEther(String(existing.price)).toString()
+    const expectedValue = parseEther(existing.price.toFixed(18)).toString()
 
     if (payment.value !== expectedValue) {
       throw invalidRequest('paymentTxHash must transfer the full listing price to the seller')

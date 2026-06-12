@@ -572,10 +572,6 @@ export class ExpeditionStore {
       create index if not exists market_material_listings_seller_idx on market_material_listings(seller_wallet, status);
       create index if not exists player_transactions_wallet_time_idx on player_transactions(wallet, created_at);
       create index if not exists pet_experience_wallet_idx on pet_experience(wallet);
-
-      update player_transactions
-      set sepolia_amount = '0'
-      where action in ('list', 'buy', 'sell');
     `)
   }
 }

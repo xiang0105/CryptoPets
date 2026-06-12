@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { materialDefinitions } from '@cryptopets/game-content'
 import type { GoodieSft } from '@/data/goodies'
@@ -473,7 +473,7 @@ onMounted(() => {
               <p v-else-if="transactions.length === 0" class="store-notice">
                 {{ isZh ? '尚無交易紀錄' : 'No transactions yet' }}
               </p>
-              <p v-for="item in transactions" :key="`${item.action}-${item.name}`">
+              <p v-for="(item, index) in transactions" :key="`${item.action}-${item.name}-${index}`">
                 <strong>{{ transactionActionLabel(item.action) }}: {{ item.name }}</strong>
                 <span :class="{ gain: item.amount > 0 }">
                   {{ marketAmount(item.amount) }}

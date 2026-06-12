@@ -66,6 +66,7 @@ interface TransactionsResponse {
 }
 
 interface TransactionRequestDto {
+  from?: string
   to: string
   data: string
   value: string
@@ -187,7 +188,7 @@ export async function discardMaterial(wallet: string, materialId: string, amount
     }),
   })
 
-  await sendWalletTransaction(transaction)
+  await sendWalletTransaction(transaction, wallet)
 }
 
 export async function cancelMarketListing(wallet: string, listingId: string) {
@@ -219,7 +220,7 @@ export async function buyMarketListing(wallet: string, listingId: string) {
     data: '0x',
     value: decimalEthToWei(listing.price),
     chainId: contracts.chainId || fallbackChainId,
-  })
+  }, wallet)
   const response = await apiRequest<MaterialListingResponse>(`/market/materials/${payload.listingId}/buy`, {
     method: 'POST',
     body: JSON.stringify({
@@ -289,7 +290,7 @@ function decimalEthToWei(value: number) {
   return wei || '0'
 }
 
-async function sendWalletTransaction(transaction: TransactionRequestDto) {
+async function sendWalletTransaction(transaction: TransactionRequestDto, from?: string) {
   if (!window.ethereum) {
     throw new Error('WALLET_PROVIDER_MISSING')
   }
@@ -297,6 +298,7 @@ async function sendWalletTransaction(transaction: TransactionRequestDto) {
   const hash = await window.ethereum.request({
     method: 'eth_sendTransaction',
     params: [{
+      from: transaction.from ?? from,
       to: transaction.to,
       data: transaction.data,
       value: toHexQuantity(transaction.value),
