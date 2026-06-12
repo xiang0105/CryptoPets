@@ -7,6 +7,7 @@ import { isAddress } from 'ethers'
 export interface AppConfig {
   port: number
   corsOrigin: string
+  corsOrigins?: string[]
   rpcUrl: string
   chainId: number
   cryptoPetsAddress: string
@@ -32,6 +33,7 @@ const backendRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const defaults = {
   port: '3400',
   corsOrigin: 'http://localhost:5400',
+  corsOrigins: ['http://localhost:5400', 'http://127.0.0.1:5400'],
   rpcUrl: 'https://ethereum-sepolia-rpc.publicnode.com',
   chainId: '11155111',
   cryptoPetsAddress: '0x8F71AddC5b56D148727d129F54e31d24f632CeD0',
@@ -80,6 +82,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   return {
     port,
     corsOrigin: env.CORS_ORIGIN || defaults.corsOrigin,
+    corsOrigins: readCorsOrigins(env.CORS_ORIGIN, defaults.corsOrigins),
     rpcUrl: env.RPC_URL || defaults.rpcUrl,
     chainId,
     cryptoPetsAddress,
@@ -103,4 +106,24 @@ function readNumber(value: string | undefined, fallback: string, name: string) {
   }
 
   return parsed
+}
+
+function readCorsOrigins(value: string | undefined, fallback: string[]) {
+  const rawValue = value?.trim()
+
+  if (!rawValue) {
+    return [...fallback]
+  }
+
+  const origins = new Set(rawValue.split(',').map((item) => item.trim()).filter(Boolean))
+
+  if (origins.has('http://localhost:5400')) {
+    origins.add('http://127.0.0.1:5400')
+  }
+
+  if (origins.has('http://127.0.0.1:5400')) {
+    origins.add('http://localhost:5400')
+  }
+
+  return [...origins]
 }

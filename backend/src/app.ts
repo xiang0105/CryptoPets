@@ -80,9 +80,10 @@ export function createApp(
   dbMarketServices?: DbMarketApiServices
 ) {
   const app = express()
+  const corsOrigins = config.corsOrigins ?? [config.corsOrigin]
 
   app.use(helmet())
-  app.use(cors({ origin: config.corsOrigin }))
+  app.use(cors({ origin: corsOrigins }))
   app.use(express.json())
 
   app.use((_request, response, next) => {

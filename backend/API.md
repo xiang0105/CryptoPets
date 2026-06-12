@@ -16,7 +16,7 @@
 
 ```env
 PORT=3400
-CORS_ORIGIN=http://localhost:5400
+CORS_ORIGIN=http://localhost:5400 或 http://127.0.0.1:5400
 RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
 CHAIN_ID=11155111
 CRYPTO_PETS_ADDRESS=0x8F71AddC5b56D148727d129F54e31d24f632CeD0
