@@ -45,7 +45,7 @@ Object.assign(detailCopy, {
   useUnavailable: '使用功能暫時尚未開放。',
   discardSuccess: '已送出鏈上丟棄交易。',
   sellSuccess: '已放入市場，請到商店頁查看掛單。',
-  defaultSellPrice: 0.00000000001,
+  defaultSellPrice: 0.01,
 })
 const shelfPageSize = 20
 const selectedSlot = ref(0)

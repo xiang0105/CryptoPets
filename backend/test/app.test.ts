@@ -96,7 +96,12 @@ describe('backend app', () => {
     const sellerWallet = '0x86d892de0CF9256401df49Aa08d51d0bC75A106d'
     const buyerWallet = '0xD8b6b7d402DDC69788f51eD613c3c3e9dDDCAB7e'
     const materialAdminCalls: Array<{ functionName: string; args: unknown[]; confirmations?: number }> = []
-    const app = createApp(baseConfig, createMaterialBalanceServices({ '2': '10' }, materialAdminCalls), undefined, undefined, store)
+    const app = createApp(baseConfig, createMaterialBalanceServices({ '2': '10' }, materialAdminCalls, {
+      hash: '0xbuy',
+      from: buyerWallet,
+      to: sellerWallet,
+      value: '250000000000000000'
+    }), undefined, undefined, store)
 
     try {
       const createResponse = await request(app, 'POST', '/market/materials', {
@@ -148,6 +153,22 @@ describe('backend app', () => {
           sepoliaAmount: '-0.25'
         })
       ])
+
+      const sellerSaleTransactions = await request(app, 'GET', `/wallets/${sellerWallet}/transactions`)
+      expect(sellerSaleTransactions.body.transactions).toEqual([
+        expect.objectContaining({
+          action: 'sell',
+          materialId: 'MAT-2C',
+          materialAmount: 2,
+          sepoliaAmount: '0.25'
+        }),
+        expect.objectContaining({
+          action: 'list',
+          materialId: 'MAT-2C',
+          materialAmount: 2,
+          sepoliaAmount: '0'
+        })
+      ])
     } finally {
       store.close()
     }
@@ -163,7 +184,7 @@ describe('backend app', () => {
         sellerWallet,
         materialId: 'MAT-2C',
         amount: 1,
-        price: 0.00000000001
+        price: 0.01
       })
       const buyResponse = await request(app, 'POST', `/market/materials/${createResponse.body.listing.id}/buy`, {
         buyerWallet: sellerWallet,
@@ -188,7 +209,7 @@ describe('backend app', () => {
         sellerWallet,
         materialId: 'MAT-2C',
         amount: 1,
-        price: 0.00000000001
+        price: 0.01
       })
       const cancelResponse = await request(app, 'POST', `/market/materials/${createResponse.body.listing.id}/cancel`, {
         sellerWallet
@@ -213,7 +234,7 @@ describe('backend app', () => {
         sellerWallet,
         materialId: '2',
         amount: 1,
-        price: 0.00000000001
+        price: 0.01
       })
 
       expect(response.status).toBe(200)
@@ -233,7 +254,7 @@ describe('backend app', () => {
         sellerWallet,
         materialId: 'MAT-2C',
         amount: 1,
-        price: 0.00000000001
+        price: 0.01
       })
 
       expect(createResponse.status).toBe(200)
@@ -260,13 +281,13 @@ describe('backend app', () => {
         sellerWallet,
         materialId: 'MAT-2C',
         amount: 2,
-        price: 0.00000000001
+        price: 0.01
       })
       const secondResponse = await request(app, 'POST', '/market/materials', {
         sellerWallet,
         materialId: 'MAT-2C',
         amount: 1,
-        price: 0.00000000001
+        price: 0.01
       })
 
       expect(firstResponse.status).toBe(200)
@@ -280,7 +301,8 @@ describe('backend app', () => {
 
 function createMaterialBalanceServices(
   amountsByMaterialId: Record<string, string>,
-  materialAdminCalls: Array<{ functionName: string; args: unknown[]; confirmations?: number }> = []
+  materialAdminCalls: Array<{ functionName: string; args: unknown[]; confirmations?: number }> = [],
+  confirmedNativeTransaction: { hash: string; from: string; to: string; value: string } | null = null
 ): BackendServices {
   return {
     getContracts: () => ({
@@ -311,6 +333,22 @@ function createMaterialBalanceServices(
     sendMaterialAdminTxAndWait: async (functionName, args, confirmations) => {
       materialAdminCalls.push({ functionName, args, confirmations })
       return { hash: '' }
+    },
+    getConfirmedNativeTransaction: async (hash) => {
+      if (!confirmedNativeTransaction || hash !== confirmedNativeTransaction.hash) {
+        return null
+      }
+
+      return {
+        hash: confirmedNativeTransaction.hash,
+        from: confirmedNativeTransaction.from,
+        to: confirmedNativeTransaction.to,
+        value: confirmedNativeTransaction.value,
+        chainId: baseConfig.chainId,
+        nonce: 0,
+        blockNumber: 1,
+        status: 1
+      }
     }
   }
 }

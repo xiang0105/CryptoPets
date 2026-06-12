@@ -52,7 +52,7 @@ const shelfSwitching = ref(false)
 const pendingRemoval = ref<GoodieSft | null>(null)
 const isInventoryModalOpen = ref(false)
 const selectedInventoryId = ref('')
-const listingPrice = ref(0.00000000001)
+const listingPrice = ref(0.01)
 const listingAmount = ref(1)
 const storeNotice = ref('')
 let shelfSwitchTimer: number | undefined
@@ -179,7 +179,7 @@ function openInventoryModal() {
   const firstGoodie = inventoryGoodies.value[0]
 
   selectedInventoryId.value = selectedInventoryId.value || firstGoodie?.id || ''
-  listingPrice.value = 0.00000000001
+  listingPrice.value = 0.01
   listingAmount.value = Math.min(listingAmount.value, maxListingAmount.value)
   isInventoryModalOpen.value = true
   void loadMaterialBackpack({ force: true }).catch(() => undefined)
@@ -195,7 +195,7 @@ function selectInventoryGoodie(goodie: GoodieSft | null) {
   }
 
   selectedInventoryId.value = goodie.id
-  listingPrice.value = 0.00000000001
+  listingPrice.value = 0.01
   listingAmount.value = Math.min(1, goodie.amount)
 }
 
@@ -219,7 +219,7 @@ async function listSelectedGoodie() {
 
   try {
     const amount = Math.min(maxListingAmount.value, Math.max(1, Math.round(listingAmount.value)))
-    const price = Math.max(0.00000000001, Number(listingPrice.value))
+    const price = Math.max(0.01, Number(listingPrice.value))
     await requestListMarketMaterial(selectedGoodie.id, amount, price)
     storeNotice.value = `${text.value.listed} ${displayName(selectedGoodie)}`
     closeInventoryModal()
@@ -570,7 +570,7 @@ onMounted(() => {
             </label>
             <label>
               {{ storeCopy.price }}
-              <input v-model.number="listingPrice" type="number" min="0.00000000001" step="0.00000000001" />
+              <input v-model.number="listingPrice" type="number" min="0.01" step="0.01" />
               <small>{{ currencyUnit() }}</small>
             </label>
             <button type="button" :disabled="operationLoading.listMarketMaterial" @click="listSelectedGoodie">

@@ -1,3 +1,4 @@
+import { BrowserProvider } from 'ethers'
 import type {
   ExpeditionLogEntry,
   ClaimRewardRequest,
@@ -306,6 +307,13 @@ async function sendWalletTransaction(transaction: TransactionRequestDto, from: s
   })
 
   if (typeof hash !== 'string') {
+    throw new Error('WALLET_TRANSACTION_FAILED')
+  }
+
+  const provider = new BrowserProvider(window.ethereum)
+  const receipt = await provider.waitForTransaction(hash, 1)
+
+  if (!receipt || receipt.status !== 1) {
     throw new Error('WALLET_TRANSACTION_FAILED')
   }
 

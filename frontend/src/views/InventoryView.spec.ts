@@ -184,7 +184,7 @@ describe('InventoryView', () => {
     expect(requestDiscardMaterial).toHaveBeenCalledWith('MAT-2C', 1)
 
     await actionButtons[2]!.trigger('click')
-    expect(requestListMarketMaterial).toHaveBeenCalledWith('MAT-2C', 1, 0.00000000001)
+    expect(requestListMarketMaterial).toHaveBeenCalledWith('MAT-2C', 1, 0.01)
     expect(loadMarketListings).toHaveBeenCalledWith({ force: true })
   })
 })

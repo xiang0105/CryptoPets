@@ -2,9 +2,10 @@ import cors from 'cors'
 import express, { type NextFunction, type Request, type Response } from 'express'
 import helmet from 'helmet'
 import { randomUUID } from 'node:crypto'
+import { parseEther } from 'ethers'
 import type { AppConfig } from './config.js'
 import { asyncRoute, conflict, errorHandler, HttpError, invalidRequest, notFound } from './errors.js'
-import type { ChainServices, SentTransactionDto, TransactionRequestDto } from './chain.js'
+import type { ChainServices, ConfirmedNativeTransactionDto, SentTransactionDto, TransactionRequestDto } from './chain.js'
 import type { ExpeditionDetails, ExpeditionLogEntry } from './expeditionTypes.js'
 import { isKnownMaterialId, materialDefinitions } from '@cryptopets/game-content'
 import type { MarketListing, PlayerTransaction } from '@cryptopets/shared'
@@ -38,6 +39,7 @@ export interface BackendServices {
   sendPetAdminTx(functionName: string, args: unknown[]): Promise<SentTransactionDto>
   sendMaterialAdminTx(functionName: string, args: unknown[]): Promise<SentTransactionDto>
   sendMaterialAdminTxAndWait(functionName: string, args: unknown[], confirmations?: number): Promise<SentTransactionDto>
+  getConfirmedNativeTransaction(hash: string, confirmations?: number): Promise<ConfirmedNativeTransactionDto | null>
 }
 
 export interface ExpeditionApiServices {
@@ -255,6 +257,24 @@ export function createApp(
 
     if (!paymentTxHash) {
       throw invalidRequest('paymentTxHash is required')
+    }
+
+    const sellerWallet = existing.sellerWallet
+
+    if (!sellerWallet) {
+      throw invalidRequest('market listing seller wallet is missing')
+    }
+
+    const payment = await services.getConfirmedNativeTransaction(paymentTxHash, 1)
+
+    if (!payment || payment.to.toLowerCase() !== sellerWallet.toLowerCase() || payment.from.toLowerCase() !== buyerWallet.toLowerCase()) {
+      throw invalidRequest('paymentTxHash must transfer the full listing price to the seller')
+    }
+
+    const expectedValue = parseEther(String(existing.price)).toString()
+
+    if (payment.value !== expectedValue) {
+      throw invalidRequest('paymentTxHash must transfer the full listing price to the seller')
     }
 
     const chainMaterialId = BigInt(contentMaterialIdToChainId(existing.materialId))

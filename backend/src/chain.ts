@@ -40,6 +40,10 @@ export interface ConfirmedTransactionDto extends SentTransactionDto {
   status: number | null
 }
 
+export interface ConfirmedNativeTransactionDto extends ConfirmedTransactionDto {
+  value: string
+}
+
 export interface PetDto {
   tokenId: string
   owner: string
@@ -299,6 +303,59 @@ export class ChainServices {
     confirmations = 1
   ): Promise<ConfirmedTransactionDto> {
     return this.sendAdminTxAndWait(this.config.cryptoMaterialsAddress, cryptoMaterialsAbi, functionName, args, confirmations)
+  }
+
+  async sendNativeTransferAndWait(
+    to: string,
+    value: bigint,
+    confirmations = 1
+  ): Promise<ConfirmedTransactionDto> {
+    const signer = this.getAdminSigner()
+    const tx = await signer.sendTransaction({
+      to,
+      value
+    })
+    const receipt = await tx.wait(confirmations)
+
+    return {
+      hash: tx.hash,
+      from: await signer.getAddress(),
+      to,
+      chainId: this.config.chainId,
+      nonce: tx.nonce,
+      blockNumber: receipt?.blockNumber ?? null,
+      status: receipt?.status ?? null
+    }
+  }
+
+  async getConfirmedNativeTransaction(hash: string, confirmations = 1): Promise<ConfirmedNativeTransactionDto | null> {
+    const receipt = await this.provider.waitForTransaction(hash, confirmations)
+
+    if (!receipt) {
+      return null
+    }
+
+    let tx = await this.provider.getTransaction(hash)
+
+    for (let attempts = 0; !tx && attempts < 20; attempts += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      tx = await this.provider.getTransaction(hash)
+    }
+
+    if (!tx) {
+      return null
+    }
+
+    return {
+      hash: tx.hash,
+      from: tx.from ?? ZeroAddress,
+      to: tx.to ? getAddress(tx.to) : ZeroAddress,
+      value: bigintToString(tx.value),
+      chainId: this.config.chainId,
+      nonce: tx.nonce,
+      blockNumber: receipt?.blockNumber ?? null,
+      status: receipt?.status ?? null
+    }
   }
 
   private buildTx(address: string, contractInterface: Interface, functionName: string, args: unknown[], value: bigint) {
